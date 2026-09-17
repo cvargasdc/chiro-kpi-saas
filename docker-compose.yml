@@ -1,0 +1,22 @@
+# Local Postgres only. Do not point this file at production.
+# Credentials here are well-known local defaults, not production secrets.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chirokpi
+      POSTGRES_PASSWORD: chirokpi_local
+      POSTGRES_DB: chirokpi
+    ports:
+      - "5432:5432"
+    volumes:
+      - chirokpi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chirokpi -d chirokpi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  chirokpi_pgdata:
