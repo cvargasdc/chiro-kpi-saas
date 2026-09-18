@@ -4,7 +4,7 @@ Multi-tenant practice KPI software for chiropractic clinics. This tree is a **gr
 
 **Path B:** treat patient identity, contact, clinical notes, and joinable operational rows as **ePHI from day one**.
 
-Week 2 delivers the foundation: schema, auth, tenant isolation, audit skeleton, a thin UI, and tests. It does **not** replace chiro-kpi.com.
+Week 3 hardens auth (password reset, practice invites, TOTP MFA, RBAC on writes) on the Week 2 foundation. It does **not** replace chiro-kpi.com.
 
 ---
 
@@ -14,15 +14,17 @@ Week 2 delivers the foundation: schema, auth, tenant isolation, audit skeleton, 
 |-------------------------|--------------------------------|
 | Organizations → practices → memberships | Replit Auth / impersonation |
 | Full PHI posture + audit log skeleton | OpenAI (no client, no mapping) |
-| Email/username + password, bcrypt, session cookies | ChiroTouch EOD parsers |
+| Email/username + password, bcrypt, session cookies, TOTP MFA | ChiroTouch EOD parsers |
 | RBAC: owner, admin, clinician, staff, readonly | SimplePractice-specific import |
-| Patient CRUD stubs, isolated by practice | Stripe / Resend / S3 (later) |
+| Password reset + practice invites (email stub) | Stripe / live Resend (adapter documented) |
+| Patient CRUD stubs, isolated by practice | S3 / Daily Log / Dashboard product |
 | CSV/Excel import **placeholder only** | Hardcoded demo secrets |
 | Local Docker Postgres | Any deploy to Replit or production |
 
 Read next:
 
-- [docs/WEEK2-FOUNDATION.md](docs/WEEK2-FOUNDATION.md) — what landed
+- [docs/WEEK3-AUTH.md](docs/WEEK3-AUTH.md) — password reset, invites, TOTP MFA
+- [docs/WEEK2-FOUNDATION.md](docs/WEEK2-FOUNDATION.md) — schema, isolation, audit skeleton
 - [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) — threats and controls
 - [docs/BAA-VENDORS.md](docs/BAA-VENDORS.md) — AWS, Stripe, Resend in; **OpenAI out**
 - [WEEK1-BRIEFING.md](WEEK1-BRIEFING.md) — inventory of the legacy app
@@ -41,7 +43,7 @@ You need Node 20+ and Docker (for Postgres).
 
 ```bash
 cp .env.example .env
-# Set SESSION_SECRET to a long random value, e.g.:
+# Set SESSION_SECRET and MFA_ENCRYPTION_KEY to long random values, e.g.:
 #   openssl rand -hex 32
 
 docker compose up -d
@@ -56,7 +58,7 @@ Open [http://localhost:5000](http://localhost:5000). Register a user — that cr
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Isolation, auth, audit, schema constraint tests |
+| `npm test` | Isolation, auth (reset/invite/MFA/RBAC), audit, schema tests |
 | `npm run check` | TypeScript |
 | `npm run build` | Production client bundle → `dist/public` |
 | `npm run db:push` | Push Drizzle schema to local Postgres |
@@ -84,6 +86,8 @@ To see the test fail when the filter is removed: delete the `practiceId` predica
 ## Secrets
 
 Never commit `.env`. Never paste production credentials into this repo. There is no seed-demo password in source.
+
+`MFA_ENCRYPTION_KEY` encrypts TOTP secrets at rest. Password-reset and invite mail is a **stub** in Week 3 (log / in-memory outbox). How to attach Resend later is in [docs/WEEK3-AUTH.md](docs/WEEK3-AUTH.md).
 
 ---
 

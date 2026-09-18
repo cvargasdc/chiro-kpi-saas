@@ -7,6 +7,8 @@ import {
   goals,
   auditLogs,
   practices,
+  passwordResetTokens,
+  teamInvitations,
 } from "../shared/schema";
 
 const SCHEMA = readFileSync("shared/schema.ts", "utf8");
@@ -31,6 +33,17 @@ describe("Path B schema constraints", () => {
   it("does not depend on OpenAI", () => {
     expect(PKG.dependencies?.openai).toBeUndefined();
     expect(PKG.devDependencies?.openai).toBeUndefined();
+  });
+
+  it("stores hashed password-reset tokens and tenant-scoped invites", () => {
+    expect(passwordResetTokens.tokenHash).toBeDefined();
+    expect(passwordResetTokens.userId.notNull).toBe(true);
+    expect(passwordResetTokens.expiresAt.notNull).toBe(true);
+    expect(teamInvitations.orgId.notNull).toBe(true);
+    expect(teamInvitations.practiceId.notNull).toBe(true);
+    expect(teamInvitations.tokenHash).toBeDefined();
+    expect(SCHEMA).toMatch(/mfa_secret_enc/);
+    expect(SCHEMA).toMatch(/mfaPendingSecretEnc|mfa_pending_secret_enc/);
   });
 
   it("does not ship ChiroTouch parsers", () => {

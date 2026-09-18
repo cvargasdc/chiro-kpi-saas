@@ -6,6 +6,7 @@ export type SessionUser = {
   username: string;
   displayName: string;
   status: string;
+  mfaEnabled: boolean;
 };
 
 export type TenantContext = {
@@ -27,6 +28,7 @@ declare module "express-session" {
     userId?: string;
     activeOrgId?: string;
     activePracticeId?: string;
+    authIssuedAt?: string;
   }
 }
 

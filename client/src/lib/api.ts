@@ -37,7 +37,7 @@ export type MeResponse = {
     email: string;
     username: string;
     displayName: string;
-    mfa: { enabled: boolean; note: string };
+    mfa: { enabled: boolean; methods: string[]; status: string; note?: string };
   };
   organizations: Array<{ id: string; name: string; role: string }>;
   practices: Array<{ id: string; name: string; orgId: string; role: string }>;

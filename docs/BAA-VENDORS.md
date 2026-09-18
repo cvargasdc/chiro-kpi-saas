@@ -15,7 +15,7 @@ This list is the **rebuild** inventory. The live Replit app is out of scope here
 |--------|-----|---------------|-----|----------------|
 | **AWS** | App hosting (e.g. App Runner), RDS PostgreSQL, S3 (later), Secrets Manager, CloudWatch | Yes — primary store and backups | AWS HIPAA BAA (Artifact). Signing the BAA does **not** make the app compliant by itself. | Not deployed from this repo. Use private RDS, encryption at rest (KMS), TLS in transit, no public DB. |
 | **Stripe** | Subscription billing | Generally **no patient PHI**. May hold org/practice billing identity (workforce). Keep PHI out of Stripe metadata. | Stripe HIPAA support is limited; treat as **no PHI in Stripe**. BAA only if a future flow sends patient-linked data (do not). | Not wired. |
-| **Resend** | Transactional email (password reset, invites, digests) | Workforce email. Digests must **not** include patient names. | Execute a BAA if any email could include ePHI. Safer: never put patient identifiers in email. | Not wired. |
+| **Resend** | Transactional email (password reset, invites, digests) | Workforce email. Digests must **not** include patient names. | Execute a BAA if any email could include ePHI. Safer: never put patient identifiers in email. | Interface + `ResendMailer` stub in Week 3. Runtime uses `LoggingMailer` / tests use `InMemoryMailer`. See `docs/WEEK3-AUTH.md`. |
 
 Reference: Week 1 reviewed `/workspace/chiro-kpi-reference/AWS-Business-Associate-Addendum.pdf` (read-only). Re-verify the signed AWS BAA in Artifact before any production cutover.
 

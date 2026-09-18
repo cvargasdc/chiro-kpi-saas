@@ -25,6 +25,8 @@ async function main() {
       trustProxy: config.isProduction,
       pgPool: pool,
     },
+    mfaEncryptionKey: config.mfaEncryptionKey,
+    publicBaseUrl: config.publicBaseUrl,
   });
 
   const httpServer = createServer(app);

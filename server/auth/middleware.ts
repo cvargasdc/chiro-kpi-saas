@@ -44,12 +44,22 @@ export function authenticate(storage: AppStorage) {
       req.session.destroy(() => undefined);
       return res.status(401).json({ error: "unauthenticated" });
     }
+    if (user.credentialsChangedAt) {
+      const issued = req.session.authIssuedAt
+        ? new Date(req.session.authIssuedAt).getTime()
+        : 0;
+      if (issued < user.credentialsChangedAt.getTime()) {
+        req.session.destroy(() => undefined);
+        return res.status(401).json({ error: "unauthenticated" });
+      }
+    }
     req.currentUser = {
       id: user.id,
       email: user.email,
       username: user.username,
       displayName: user.displayName,
       status: user.status,
+      mfaEnabled: user.mfaEnabled,
     };
     next();
   };

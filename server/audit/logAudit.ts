@@ -13,7 +13,17 @@ export type AuditAction =
   | "export"
   | "login"
   | "logout"
-  | "denied";
+  | "denied"
+  | "password_reset_requested"
+  | "password_reset_completed"
+  | "password_changed"
+  | "invite_created"
+  | "invite_accepted"
+  | "invite_revoked"
+  | "mfa_enroll_started"
+  | "mfa_enroll_completed"
+  | "mfa_disabled"
+  | "mfa_verified";
 
 export type LogAuditInput = {
   orgId: string;

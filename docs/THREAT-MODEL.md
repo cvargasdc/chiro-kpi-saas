@@ -60,7 +60,7 @@ Browser  --TLS-->  Express (session cookie)
 | T1 | Cross-tenant PHI read (Practice A reads B) | High — HIPAA incident | PHI helpers require `orgId` + `practiceId`; no `"default"` practiceId; membership middleware; automated isolation tests | Postgres RLS; query linter |
 | T2 | IDOR by patient UUID | High | `getPatient` always ANDs tenant keys; unknown IDs return 404 | Same |
 | T3 | Client-supplied tenant IDs | High | Writes take tenant from session/membership, not from body | Bind tenant in DB session vars |
-| T4 | Weak passwords / stolen creds | High | ≥12 chars + complexity; bcrypt; 8h rolling httpOnly cookies; secure + SameSite=strict in production | MFA (stubbed), breach-password check, lockout |
+| T4 | Weak passwords / stolen creds | High | ≥12 chars + complexity; bcrypt; 8h rolling httpOnly cookies; secure + SameSite=strict in production; TOTP MFA + hashed recovery codes; hashed password-reset tokens | Breach-password check, lockout, WebAuthn |
 | T5 | Session fixation / cookie theft | High | `session.regenerate` on login; httpOnly; production `secure` | CSRF tokens if cookie SameSite ever loosens |
 | T6 | Missing audit of PHI access | Medium | `logAudit` on patient create/read/update/delete/list; 6-year retention intent; prune disabled | Hash-chain / WORM; cover exports |
 | T7 | Secrets in repo / seed-demo | High | No hardcoded session secrets; no seed-demo endpoint | Secrets Manager in AWS deploy |

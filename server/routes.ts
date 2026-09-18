@@ -1,18 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import {
-  normalizeEmail,
-  normalizeUsername,
-  USERNAME_PATTERN,
-  validatePassword,
-} from "@shared/password-policy";
-import {
   PHI_DELETE_ROLES,
   PHI_READ_ROLES,
   PHI_WRITE_ROLES,
 } from "@shared/roles";
 import { logAudit } from "./audit/logAudit";
-import { getMfaStatus } from "./auth/mfa";
+import { registerAuthRoutes } from "./auth/http";
 import {
   authenticate,
   getClientIp,
@@ -20,23 +14,9 @@ import {
   requirePracticeMembership,
   requireRole,
 } from "./auth/middleware";
-import { hashPassword, verifyPasswordOrDummy } from "./auth/password";
+import type { HttpContext } from "./http-context";
 import { importNotImplemented } from "./import/csv-excel-stub";
-import type { AppStorage } from "./storage/types";
-
-const registerSchema = z.object({
-  email: z.string().email().max(320),
-  username: z.string().regex(USERNAME_PATTERN, "Username must be 3-64 characters (letters, numbers, . _ -)"),
-  password: z.string(),
-  displayName: z.string().min(1).max(120),
-  organizationName: z.string().min(1).max(200),
-  practiceName: z.string().min(1).max(200),
-});
-
-const loginSchema = z.object({
-  login: z.string().min(1).max(320),
-  password: z.string().min(1),
-});
+import { registerInviteRoutes } from "./invites/http";
 
 const createOrgSchema = z.object({
   name: z.string().min(1).max(200),
@@ -59,46 +39,8 @@ const patientWriteSchema = z.object({
 
 const patientPatchSchema = patientWriteSchema.partial();
 
-const contextSchema = z.object({
-  orgId: z.string().min(1),
-  practiceId: z.string().min(1),
-});
-
-function publicUser(user: {
-  id: string;
-  email: string;
-  username: string;
-  displayName: string;
-  status: string;
-}) {
-  return {
-    id: user.id,
-    email: user.email,
-    username: user.username,
-    displayName: user.displayName,
-    status: user.status,
-    mfa: getMfaStatus(),
-  };
-}
-
-function establishSession(
-  req: Request,
-  userId: string,
-  orgId: string,
-  practiceId: string,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    req.session.regenerate((err) => {
-      if (err) return reject(err);
-      req.session.userId = userId;
-      req.session.activeOrgId = orgId;
-      req.session.activePracticeId = practiceId;
-      req.session.save((saveErr) => (saveErr ? reject(saveErr) : resolve()));
-    });
-  });
-}
-
-export function registerRoutes(app: Express, storage: AppStorage): void {
+export function registerRoutes(app: Express, ctx: HttpContext): void {
+  const storage = ctx.storage;
   const auth = authenticate(storage);
   const practiceGate = requirePracticeMembership(storage);
   const orgGate = requireOrgAccess(storage);
@@ -114,168 +56,8 @@ export function registerRoutes(app: Express, storage: AppStorage): void {
     });
   });
 
-  app.post("/api/auth/register", async (req, res) => {
-    const parsed = registerSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
-    }
-    const policy = validatePassword(parsed.data.password);
-    if (!policy.ok) {
-      return res.status(400).json({ error: "password_policy", details: policy.errors });
-    }
-
-    const email = normalizeEmail(parsed.data.email);
-    const username = normalizeUsername(parsed.data.username);
-
-    if (await storage.getUserByEmail(email)) {
-      return res.status(409).json({ error: "email_taken" });
-    }
-    if (await storage.getUserByUsername(username)) {
-      return res.status(409).json({ error: "username_taken" });
-    }
-
-    const passwordHash = await hashPassword(parsed.data.password);
-    const user = await storage.createUser({
-      email,
-      username,
-      passwordHash,
-      displayName: parsed.data.displayName.trim(),
-    });
-    const org = await storage.createOrganization({
-      name: parsed.data.organizationName.trim(),
-    });
-    const practice = await storage.createPractice({
-      orgId: org.id,
-      name: parsed.data.practiceName.trim(),
-    });
-    await storage.createOrgMembership({
-      orgId: org.id,
-      userId: user.id,
-      role: "owner",
-    });
-    await storage.createPracticeMembership({
-      orgId: org.id,
-      practiceId: practice.id,
-      userId: user.id,
-      role: "owner",
-    });
-    await storage.touchLastLogin(user.id);
-    await establishSession(req, user.id, org.id, practice.id);
-
-    return res.status(201).json({
-      user: publicUser(user),
-      organization: { id: org.id, name: org.name },
-      practice: { id: practice.id, name: practice.name, orgId: org.id, role: "owner" },
-    });
-  });
-
-  app.post("/api/auth/login", async (req, res) => {
-    const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "invalid_input" });
-    }
-    const user = await storage.getUserByLogin(parsed.data.login);
-    const passwordOk = await verifyPasswordOrDummy(
-      parsed.data.password,
-      user?.passwordHash,
-    );
-    if (!user || user.status !== "active" || !passwordOk) {
-      return res.status(401).json({ error: "invalid_credentials" });
-    }
-
-    const practices = await storage.listPracticesForUser(user.id);
-    const first = practices[0];
-    await storage.touchLastLogin(user.id);
-    await establishSession(
-      req,
-      user.id,
-      first?.orgId ?? "",
-      first?.id ?? "",
-    );
-
-    return res.json({
-      user: publicUser(user),
-      practice: first
-        ? { id: first.id, name: first.name, orgId: first.orgId, role: first.role }
-        : null,
-    });
-  });
-
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy(() => {
-      res.clearCookie("chirokpi.sid");
-      res.json({ ok: true });
-    });
-  });
-
-  app.get("/api/me", auth, async (req, res) => {
-    const user = req.currentUser!;
-    const [organizations, practices] = await Promise.all([
-      storage.listOrganizationsForUser(user.id),
-      storage.listPracticesForUser(user.id),
-    ]);
-    const activePractice = practices.find(
-      (p) => p.id === req.session.activePracticeId,
-    ) ?? practices[0];
-    const activeOrg = organizations.find(
-      (o) => o.id === (activePractice?.orgId ?? req.session.activeOrgId),
-    ) ?? organizations[0];
-
-    res.json({
-      user: publicUser(user),
-      organizations: organizations.map((o) => ({
-        id: o.id,
-        name: o.name,
-        role: o.role,
-      })),
-      practices: practices.map((p) => ({
-        id: p.id,
-        name: p.name,
-        orgId: p.orgId,
-        role: p.role,
-      })),
-      active: activePractice
-        ? {
-            orgId: activePractice.orgId,
-            orgName: activeOrg?.name ?? "",
-            practiceId: activePractice.id,
-            practiceName: activePractice.name,
-            role: activePractice.role,
-          }
-        : null,
-    });
-  });
-
-  app.post("/api/session/context", auth, async (req, res) => {
-    const parsed = contextSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "invalid_input" });
-    }
-    const membership = await storage.getPracticeMembership(
-      req.currentUser!.id,
-      parsed.data.practiceId,
-    );
-    const practice = await storage.getPractice(parsed.data.practiceId);
-    if (
-      !membership ||
-      !practice ||
-      practice.orgId !== parsed.data.orgId ||
-      practice.status !== "active"
-    ) {
-      return res.status(403).json({ error: "practice_access_denied" });
-    }
-    req.session.activeOrgId = practice.orgId;
-    req.session.activePracticeId = practice.id;
-    req.session.save((err) => {
-      if (err) return res.status(500).json({ error: "session_error" });
-      res.json({
-        orgId: practice.orgId,
-        practiceId: practice.id,
-        practiceName: practice.name,
-        role: membership.role,
-      });
-    });
-  });
+  registerAuthRoutes(app, ctx);
+  registerInviteRoutes(app, ctx);
 
   app.post("/api/organizations", auth, async (req, res) => {
     const parsed = createOrgSchema.safeParse(req.body);

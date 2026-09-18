@@ -15,10 +15,18 @@ export default function LoginPage({ onAuthed }: Props) {
     setError("");
     setPending(true);
     try {
-      await api("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ login, password }),
-      });
+      const result = await api<{ mfaRequired?: boolean; challengeToken?: string }>(
+        "/api/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ login, password }),
+        },
+      );
+      if (result.mfaRequired && result.challengeToken) {
+        sessionStorage.setItem("mfaChallenge", result.challengeToken);
+        window.location.assign("/mfa/verify");
+        return;
+      }
       const me = await api<MeResponse>("/api/me");
       onAuthed(me);
     } catch (err) {
@@ -39,8 +47,8 @@ export default function LoginPage({ onAuthed }: Props) {
             built for ePHI.
           </h1>
           <p className="mt-4 max-w-md text-white/80">
-            Path B foundation: multi-tenant isolation, audit logging, and no
-            OpenAI subprocessor. Week 2 — auth and tenant shell.
+            Path B foundation: multi-tenant isolation, audit logging, TOTP MFA,
+            and no OpenAI subprocessor.
           </p>
         </div>
         <p className="text-sm text-white/60">For Chris Vargas · local rebuild only</p>
@@ -90,6 +98,11 @@ export default function LoginPage({ onAuthed }: Props) {
           >
             {pending ? "Signing in…" : "Sign in"}
           </button>
+          <p className="text-sm text-ink-500">
+            <Link href="/forgot-password" className="text-accent-600 font-medium">
+              Forgot password
+            </Link>
+          </p>
           <p className="text-sm text-ink-500">
             New practice?{" "}
             <Link href="/register" className="text-accent-600 font-medium">

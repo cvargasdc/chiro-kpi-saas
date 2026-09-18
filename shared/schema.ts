@@ -85,12 +85,14 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name").notNull(),
     status: accountStatusEnum("status").notNull().default("active"),
-    // MFA stubs — enrollment is not implemented in Week 2.
+    // TOTP MFA. Secret is AES-256-GCM ciphertext (see MFA_ENCRYPTION_KEY).
     mfaEnabled: boolean("mfa_enabled").notNull().default(false),
     mfaMethod: text("mfa_method"),
     mfaSecretEnc: text("mfa_secret_enc"),
+    mfaPendingSecretEnc: text("mfa_pending_secret_enc"),
     mfaRecoveryCodesHash: text("mfa_recovery_codes_hash"),
     mfaEnrolledAt: timestamp("mfa_enrolled_at", { withTimezone: true }),
+    credentialsChangedAt: timestamp("credentials_changed_at", { withTimezone: true }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -164,6 +166,62 @@ export const sessions = pgTable(
     expire: timestamp("expire").notNull(),
   },
   (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+/**
+ * Password-reset tokens. Store only the SHA-256 of the raw token.
+ * Not PHI — workforce account recovery.
+ */
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_hash_unique").on(table.tokenHash),
+    index("password_reset_tokens_user_id_idx").on(table.userId),
+  ],
+);
+
+/**
+ * Practice team invites. Workforce email, not patient PHI.
+ * Isolation: org_id + practice_id required (no "default").
+ */
+export const teamInvitations = pgTable(
+  "team_invitations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    email: text("email").notNull(),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    role: membershipRoleEnum("role").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    invitedBy: varchar("invited_by")
+      .notNull()
+      .references(() => users.id),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: varchar("accepted_by_user_id").references(() => users.id),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("team_invitations_token_hash_unique").on(table.tokenHash),
+    index("team_invitations_practice_id_idx").on(table.practiceId),
+    index("team_invitations_org_id_idx").on(table.orgId),
+    index("team_invitations_email_idx").on(table.email),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -311,3 +369,5 @@ export type DailyStat = typeof dailyStats.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type TeamInvitation = typeof teamInvitations.$inferSelect;

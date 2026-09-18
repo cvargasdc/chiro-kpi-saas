@@ -7,6 +7,10 @@ export type AppConfig = {
   cookieSecure: boolean;
   cookieSameSite: "lax" | "strict";
   databaseUrl: string | undefined;
+  mfaEncryptionKey: string;
+  publicBaseUrl: string;
+  resendApiKey: string | undefined;
+  resendFrom: string | undefined;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -24,6 +28,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("SESSION_SECRET must be at least 16 characters.");
   }
 
+  const mfaEncryptionKey = env.MFA_ENCRYPTION_KEY?.trim() ?? "";
+  if (!isTest && mfaEncryptionKey.length < 32) {
+    throw new Error(
+      "MFA_ENCRYPTION_KEY is required (32+ characters). Generate one with `openssl rand -hex 32`. TOTP secrets are encrypted with this key at rest.",
+    );
+  }
+
   const cookieSecure =
     isProduction || env.COOKIE_SECURE === "true";
 
@@ -36,5 +47,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     cookieSecure,
     cookieSameSite: isProduction ? "strict" : "lax",
     databaseUrl: env.DATABASE_URL,
+    mfaEncryptionKey,
+    publicBaseUrl: env.APP_BASE_URL?.trim() || "http://localhost:5000",
+    resendApiKey: env.RESEND_API_KEY?.trim() || undefined,
+    resendFrom: env.RESEND_FROM?.trim() || undefined,
   };
 }

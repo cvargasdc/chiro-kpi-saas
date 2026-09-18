@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 import type { MembershipRole } from "@shared/roles";
@@ -8,12 +8,15 @@ import type {
   NewAuditLog,
   PatientWrite,
   StoredAuditLog,
+  StoredInvitation,
   StoredOrgMembership,
   StoredOrganization,
+  StoredPasswordResetToken,
   StoredPatient,
   StoredPractice,
   StoredPracticeMembership,
   StoredUser,
+  UserPatch,
 } from "./types";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -27,9 +30,36 @@ function mapUser(row: schema.User): StoredUser {
     displayName: row.displayName,
     status: row.status,
     mfaEnabled: row.mfaEnabled,
+    mfaMethod: row.mfaMethod,
+    mfaSecretEnc: row.mfaSecretEnc,
+    mfaPendingSecretEnc: row.mfaPendingSecretEnc,
+    mfaRecoveryCodesHash: row.mfaRecoveryCodesHash,
+    mfaEnrolledAt: row.mfaEnrolledAt,
+    credentialsChangedAt: row.credentialsChangedAt,
     lastLoginAt: row.lastLoginAt,
     createdAt: row.createdAt,
   };
+}
+
+function mapInvitation(row: schema.TeamInvitation): StoredInvitation {
+  return {
+    id: row.id,
+    email: row.email,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    role: row.role,
+    tokenHash: row.tokenHash,
+    expiresAt: row.expiresAt,
+    invitedBy: row.invitedBy,
+    acceptedAt: row.acceptedAt,
+    acceptedByUserId: row.acceptedByUserId,
+    revokedAt: row.revokedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function isPendingInvitation(row: StoredInvitation, nowDate: Date): boolean {
+  return !row.acceptedAt && !row.revokedAt && row.expiresAt.getTime() > nowDate.getTime();
 }
 
 function mapPatient(row: schema.Patient): StoredPatient {
@@ -113,6 +143,40 @@ export class DrizzleStorage implements AppStorage {
       .update(schema.users)
       .set({ lastLoginAt: new Date(), updatedAt: new Date() })
       .where(eq(schema.users.id, userId));
+  }
+
+  async updateUser(id: string, patch: UserPatch): Promise<StoredUser | undefined> {
+    const existing = await this.getUserById(id);
+    if (!existing) return undefined;
+    const [row] = await this.db
+      .update(schema.users)
+      .set({
+        passwordHash: patch.passwordHash ?? existing.passwordHash,
+        displayName: patch.displayName ?? existing.displayName,
+        status: patch.status ?? existing.status,
+        mfaEnabled: patch.mfaEnabled ?? existing.mfaEnabled,
+        mfaMethod: patch.mfaMethod === undefined ? existing.mfaMethod : patch.mfaMethod,
+        mfaSecretEnc:
+          patch.mfaSecretEnc === undefined ? existing.mfaSecretEnc : patch.mfaSecretEnc,
+        mfaPendingSecretEnc:
+          patch.mfaPendingSecretEnc === undefined
+            ? existing.mfaPendingSecretEnc
+            : patch.mfaPendingSecretEnc,
+        mfaRecoveryCodesHash:
+          patch.mfaRecoveryCodesHash === undefined
+            ? existing.mfaRecoveryCodesHash
+            : patch.mfaRecoveryCodesHash,
+        mfaEnrolledAt:
+          patch.mfaEnrolledAt === undefined ? existing.mfaEnrolledAt : patch.mfaEnrolledAt,
+        credentialsChangedAt:
+          patch.credentialsChangedAt === undefined
+            ? existing.credentialsChangedAt
+            : patch.credentialsChangedAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, id))
+      .returning();
+    return row ? mapUser(row) : undefined;
   }
 
   async createOrganization(input: { name: string }): Promise<StoredOrganization> {
@@ -291,6 +355,47 @@ export class DrizzleStorage implements AppStorage {
     };
   }
 
+  async ensureOrgMembership(input: {
+    orgId: string;
+    userId: string;
+    role: MembershipRole;
+  }): Promise<StoredOrgMembership> {
+    const [existing] = await this.db
+      .select()
+      .from(schema.orgMemberships)
+      .where(
+        and(
+          eq(schema.orgMemberships.userId, input.userId),
+          eq(schema.orgMemberships.orgId, input.orgId),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      if (existing.status === "active") {
+        return {
+          id: existing.id,
+          orgId: existing.orgId,
+          userId: existing.userId,
+          role: existing.role,
+          status: existing.status,
+        };
+      }
+      const [row] = await this.db
+        .update(schema.orgMemberships)
+        .set({ status: "active", role: input.role, acceptedAt: new Date() })
+        .where(eq(schema.orgMemberships.id, existing.id))
+        .returning();
+      return {
+        id: row.id,
+        orgId: row.orgId,
+        userId: row.userId,
+        role: row.role,
+        status: row.status,
+      };
+    }
+    return this.createOrgMembership(input);
+  }
+
   async createPracticeMembership(input: {
     orgId: string;
     practiceId: string;
@@ -341,6 +446,55 @@ export class DrizzleStorage implements AppStorage {
       role: row.role,
       status: row.status,
     };
+  }
+
+  async ensurePracticeMembership(input: {
+    orgId: string;
+    practiceId: string;
+    userId: string;
+    role: MembershipRole;
+  }): Promise<StoredPracticeMembership> {
+    const [existing] = await this.db
+      .select()
+      .from(schema.practiceMemberships)
+      .where(
+        and(
+          eq(schema.practiceMemberships.userId, input.userId),
+          eq(schema.practiceMemberships.practiceId, input.practiceId),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      if (existing.status === "active") {
+        return {
+          id: existing.id,
+          orgId: existing.orgId,
+          practiceId: existing.practiceId,
+          userId: existing.userId,
+          role: existing.role,
+          status: existing.status,
+        };
+      }
+      const [row] = await this.db
+        .update(schema.practiceMemberships)
+        .set({
+          status: "active",
+          role: input.role,
+          orgId: input.orgId,
+          acceptedAt: new Date(),
+        })
+        .where(eq(schema.practiceMemberships.id, existing.id))
+        .returning();
+      return {
+        id: row.id,
+        orgId: row.orgId,
+        practiceId: row.practiceId,
+        userId: row.userId,
+        role: row.role,
+        status: row.status,
+      };
+    }
+    return this.createPracticeMembership(input);
   }
 
   async createPatient(
@@ -501,5 +655,188 @@ export class DrizzleStorage implements AppStorage {
       ipAddress: row.ipAddress,
       createdAt: row.createdAt,
     }));
+  }
+
+  async createPasswordResetToken(input: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<StoredPasswordResetToken> {
+    const [row] = await this.db
+      .insert(schema.passwordResetTokens)
+      .values({
+        userId: input.userId,
+        tokenHash: input.tokenHash,
+        expiresAt: input.expiresAt,
+      })
+      .returning();
+    return {
+      id: row.id,
+      userId: row.userId,
+      tokenHash: row.tokenHash,
+      expiresAt: row.expiresAt,
+      usedAt: row.usedAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async getPasswordResetTokenByHash(
+    tokenHash: string,
+  ): Promise<StoredPasswordResetToken | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(schema.passwordResetTokens)
+      .where(eq(schema.passwordResetTokens.tokenHash, tokenHash))
+      .limit(1);
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      userId: row.userId,
+      tokenHash: row.tokenHash,
+      expiresAt: row.expiresAt,
+      usedAt: row.usedAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async markPasswordResetTokenUsed(id: string, usedAt: Date): Promise<void> {
+    await this.db
+      .update(schema.passwordResetTokens)
+      .set({ usedAt })
+      .where(eq(schema.passwordResetTokens.id, id));
+  }
+
+  async invalidatePasswordResetTokensForUser(
+    userId: string,
+    usedAt: Date,
+  ): Promise<void> {
+    await this.db
+      .update(schema.passwordResetTokens)
+      .set({ usedAt })
+      .where(
+        and(
+          eq(schema.passwordResetTokens.userId, userId),
+          isNull(schema.passwordResetTokens.usedAt),
+        ),
+      );
+  }
+
+  async createInvitation(input: {
+    email: string;
+    orgId: string;
+    practiceId: string;
+    role: MembershipRole;
+    tokenHash: string;
+    expiresAt: Date;
+    invitedBy: string;
+  }): Promise<StoredInvitation> {
+    requireTenantScope({ orgId: input.orgId, practiceId: input.practiceId });
+    const [row] = await this.db
+      .insert(schema.teamInvitations)
+      .values({
+        email: input.email,
+        orgId: input.orgId,
+        practiceId: input.practiceId,
+        role: input.role,
+        tokenHash: input.tokenHash,
+        expiresAt: input.expiresAt,
+        invitedBy: input.invitedBy,
+      })
+      .returning();
+    return mapInvitation(row);
+  }
+
+  async getInvitationById(id: string): Promise<StoredInvitation | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(schema.teamInvitations)
+      .where(eq(schema.teamInvitations.id, id))
+      .limit(1);
+    return row ? mapInvitation(row) : undefined;
+  }
+
+  async getInvitationByTokenHash(
+    tokenHash: string,
+  ): Promise<StoredInvitation | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(schema.teamInvitations)
+      .where(eq(schema.teamInvitations.tokenHash, tokenHash))
+      .limit(1);
+    return row ? mapInvitation(row) : undefined;
+  }
+
+  async listPendingInvitationsForPractice(
+    scope: TenantScope,
+    nowDate: Date,
+  ): Promise<StoredInvitation[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.teamInvitations)
+      .where(
+        and(
+          eq(schema.teamInvitations.orgId, orgId),
+          eq(schema.teamInvitations.practiceId, practiceId),
+          isNull(schema.teamInvitations.acceptedAt),
+          isNull(schema.teamInvitations.revokedAt),
+          gt(schema.teamInvitations.expiresAt, nowDate),
+        ),
+      );
+    return rows.map(mapInvitation);
+  }
+
+  async getPendingInvitationByEmail(
+    practiceId: string,
+    email: string,
+    nowDate: Date,
+  ): Promise<StoredInvitation | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(schema.teamInvitations)
+      .where(
+        and(
+          eq(schema.teamInvitations.practiceId, practiceId),
+          eq(schema.teamInvitations.email, email),
+          isNull(schema.teamInvitations.acceptedAt),
+          isNull(schema.teamInvitations.revokedAt),
+          gt(schema.teamInvitations.expiresAt, nowDate),
+        ),
+      )
+      .limit(1);
+    if (!row) return undefined;
+    const mapped = mapInvitation(row);
+    return isPendingInvitation(mapped, nowDate) ? mapped : undefined;
+  }
+
+  async markInvitationAccepted(
+    id: string,
+    acceptedAt: Date,
+    acceptedByUserId: string,
+  ): Promise<void> {
+    await this.db
+      .update(schema.teamInvitations)
+      .set({ acceptedAt, acceptedByUserId })
+      .where(eq(schema.teamInvitations.id, id));
+  }
+
+  async revokeInvitation(
+    id: string,
+    revokedAt: Date,
+  ): Promise<StoredInvitation | undefined> {
+    const existing = await this.getInvitationById(id);
+    if (!existing || existing.acceptedAt || existing.revokedAt) return undefined;
+    const [row] = await this.db
+      .update(schema.teamInvitations)
+      .set({ revokedAt })
+      .where(
+        and(
+          eq(schema.teamInvitations.id, id),
+          isNull(schema.teamInvitations.acceptedAt),
+          isNull(schema.teamInvitations.revokedAt),
+        ),
+      )
+      .returning();
+    return row ? mapInvitation(row) : undefined;
   }
 }

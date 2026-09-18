@@ -113,6 +113,15 @@ describe("API tenant isolation", () => {
 
     const allowedRead = await reader.get("/api/patients");
     expect(allowedRead.status).toBe(200);
+
+    const created = await owner.agent.post("/api/patients").send({ name: "Keep" });
+    expect(created.status).toBe(201);
+    const patch = await reader
+      .patch(`/api/patients/${created.body.patient.id}`)
+      .send({ name: "Hacked" });
+    expect(patch.status).toBe(403);
+    const del = await reader.delete(`/api/patients/${created.body.patient.id}`);
+    expect(del.status).toBe(403);
   });
 
   it("import routes are stubs (no parser, no OpenAI)", async () => {

@@ -6,12 +6,15 @@ import type {
   NewAuditLog,
   PatientWrite,
   StoredAuditLog,
+  StoredInvitation,
   StoredOrgMembership,
   StoredOrganization,
+  StoredPasswordResetToken,
   StoredPatient,
   StoredPractice,
   StoredPracticeMembership,
   StoredUser,
+  UserPatch,
 } from "./types";
 import type { MembershipRole } from "@shared/roles";
 
@@ -27,6 +30,8 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   practiceMemberships: StoredPracticeMembership[] = [];
   patients: StoredPatient[] = [];
   auditLogs: StoredAuditLog[] = [];
+  passwordResetTokens: StoredPasswordResetToken[] = [];
+  invitations: StoredInvitation[] = [];
 
   async createUser(input: {
     email: string;
@@ -42,6 +47,12 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
       displayName: input.displayName,
       status: "active",
       mfaEnabled: false,
+      mfaMethod: null,
+      mfaSecretEnc: null,
+      mfaPendingSecretEnc: null,
+      mfaRecoveryCodesHash: null,
+      mfaEnrolledAt: null,
+      credentialsChangedAt: null,
       lastLoginAt: null,
       createdAt: now(),
     };
@@ -74,6 +85,28 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   async touchLastLogin(userId: string): Promise<void> {
     const user = this.users.get(userId);
     if (user) user.lastLoginAt = now();
+  }
+
+  async updateUser(id: string, patch: UserPatch): Promise<StoredUser | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    if (patch.passwordHash !== undefined) user.passwordHash = patch.passwordHash;
+    if (patch.displayName !== undefined) user.displayName = patch.displayName;
+    if (patch.status !== undefined) user.status = patch.status;
+    if (patch.mfaEnabled !== undefined) user.mfaEnabled = patch.mfaEnabled;
+    if (patch.mfaMethod !== undefined) user.mfaMethod = patch.mfaMethod;
+    if (patch.mfaSecretEnc !== undefined) user.mfaSecretEnc = patch.mfaSecretEnc;
+    if (patch.mfaPendingSecretEnc !== undefined) {
+      user.mfaPendingSecretEnc = patch.mfaPendingSecretEnc;
+    }
+    if (patch.mfaRecoveryCodesHash !== undefined) {
+      user.mfaRecoveryCodesHash = patch.mfaRecoveryCodesHash;
+    }
+    if (patch.mfaEnrolledAt !== undefined) user.mfaEnrolledAt = patch.mfaEnrolledAt;
+    if (patch.credentialsChangedAt !== undefined) {
+      user.credentialsChangedAt = patch.credentialsChangedAt;
+    }
+    return user;
   }
 
   async createOrganization(input: { name: string }): Promise<StoredOrganization> {
@@ -168,6 +201,24 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     );
   }
 
+  async ensureOrgMembership(input: {
+    orgId: string;
+    userId: string;
+    role: MembershipRole;
+  }): Promise<StoredOrgMembership> {
+    const existing = this.orgMemberships.find(
+      (m) => m.userId === input.userId && m.orgId === input.orgId,
+    );
+    if (existing) {
+      if (existing.status !== "active") {
+        existing.status = "active";
+        existing.role = input.role;
+      }
+      return existing;
+    }
+    return this.createOrgMembership(input);
+  }
+
   async createPracticeMembership(input: {
     orgId: string;
     practiceId: string;
@@ -196,6 +247,26 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
         m.practiceId === practiceId &&
         m.status === "active",
     );
+  }
+
+  async ensurePracticeMembership(input: {
+    orgId: string;
+    practiceId: string;
+    userId: string;
+    role: MembershipRole;
+  }): Promise<StoredPracticeMembership> {
+    const existing = this.practiceMemberships.find(
+      (m) => m.userId === input.userId && m.practiceId === input.practiceId,
+    );
+    if (existing) {
+      if (existing.status !== "active") {
+        existing.status = "active";
+        existing.role = input.role;
+        existing.orgId = input.orgId;
+      }
+      return existing;
+    }
+    return this.createPracticeMembership(input);
   }
 
   async createPatient(
@@ -299,6 +370,135 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     return this.auditLogs.filter(
       (row) => row.orgId === orgId && row.practiceId === practiceId,
     );
+  }
+
+  async createPasswordResetToken(input: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<StoredPasswordResetToken> {
+    const row: StoredPasswordResetToken = {
+      id: randomUUID(),
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+      createdAt: now(),
+    };
+    this.passwordResetTokens.push(row);
+    return row;
+  }
+
+  async getPasswordResetTokenByHash(
+    tokenHash: string,
+  ): Promise<StoredPasswordResetToken | undefined> {
+    return this.passwordResetTokens.find((row) => row.tokenHash === tokenHash);
+  }
+
+  async markPasswordResetTokenUsed(id: string, usedAt: Date): Promise<void> {
+    const row = this.passwordResetTokens.find((item) => item.id === id);
+    if (row) row.usedAt = usedAt;
+  }
+
+  async invalidatePasswordResetTokensForUser(
+    userId: string,
+    usedAt: Date,
+  ): Promise<void> {
+    for (const row of this.passwordResetTokens) {
+      if (row.userId === userId && !row.usedAt) {
+        row.usedAt = usedAt;
+      }
+    }
+  }
+
+  async createInvitation(input: {
+    email: string;
+    orgId: string;
+    practiceId: string;
+    role: MembershipRole;
+    tokenHash: string;
+    expiresAt: Date;
+    invitedBy: string;
+  }): Promise<StoredInvitation> {
+    requireTenantScope({ orgId: input.orgId, practiceId: input.practiceId });
+    const row: StoredInvitation = {
+      id: randomUUID(),
+      email: input.email,
+      orgId: input.orgId,
+      practiceId: input.practiceId,
+      role: input.role,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+      invitedBy: input.invitedBy,
+      acceptedAt: null,
+      acceptedByUserId: null,
+      revokedAt: null,
+      createdAt: now(),
+    };
+    this.invitations.push(row);
+    return row;
+  }
+
+  async getInvitationById(id: string): Promise<StoredInvitation | undefined> {
+    return this.invitations.find((row) => row.id === id);
+  }
+
+  async getInvitationByTokenHash(
+    tokenHash: string,
+  ): Promise<StoredInvitation | undefined> {
+    return this.invitations.find((row) => row.tokenHash === tokenHash);
+  }
+
+  async listPendingInvitationsForPractice(
+    scope: TenantScope,
+    nowDate: Date,
+  ): Promise<StoredInvitation[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.invitations.filter(
+      (row) =>
+        row.orgId === orgId &&
+        row.practiceId === practiceId &&
+        !row.acceptedAt &&
+        !row.revokedAt &&
+        row.expiresAt.getTime() > nowDate.getTime(),
+    );
+  }
+
+  async getPendingInvitationByEmail(
+    practiceId: string,
+    email: string,
+    nowDate: Date,
+  ): Promise<StoredInvitation | undefined> {
+    return this.invitations.find(
+      (row) =>
+        row.practiceId === practiceId &&
+        row.email === email &&
+        !row.acceptedAt &&
+        !row.revokedAt &&
+        row.expiresAt.getTime() > nowDate.getTime(),
+    );
+  }
+
+  async markInvitationAccepted(
+    id: string,
+    acceptedAt: Date,
+    acceptedByUserId: string,
+  ): Promise<void> {
+    const row = this.invitations.find((item) => item.id === id);
+    if (row) {
+      row.acceptedAt = acceptedAt;
+      row.acceptedByUserId = acceptedByUserId;
+    }
+  }
+
+  async revokeInvitation(
+    id: string,
+    revokedAt: Date,
+  ): Promise<StoredInvitation | undefined> {
+    const row = this.invitations.find((item) => item.id === id);
+    if (!row || row.acceptedAt || row.revokedAt) return undefined;
+    row.revokedAt = revokedAt;
+    return row;
   }
 }
 

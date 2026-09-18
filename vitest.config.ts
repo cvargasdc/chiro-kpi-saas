@@ -6,6 +6,10 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     restoreMocks: true,
+    env: {
+      MFA_ENCRYPTION_KEY: "test-mfa-encryption-key-min-32-chars!!",
+      APP_BASE_URL: "http://localhost:5000",
+    },
   },
   resolve: {
     alias: {

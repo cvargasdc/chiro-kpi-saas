@@ -3,6 +3,11 @@ import { useEffect, useState } from "react";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import DashboardPage from "./pages/Dashboard";
+import ForgotPasswordPage from "./pages/ForgotPassword";
+import ResetPasswordPage from "./pages/ResetPassword";
+import MfaVerifyPage from "./pages/MfaVerify";
+import MfaEnrollPage from "./pages/MfaEnroll";
+import AcceptInvitePage from "./pages/AcceptInvite";
 import { api, type MeResponse } from "./lib/api";
 
 export default function App() {
@@ -31,6 +36,21 @@ export default function App() {
       </Route>
       <Route path="/register">
         {me ? <Redirect to="/" /> : <RegisterPage onAuthed={setMe} />}
+      </Route>
+      <Route path="/forgot-password">
+        {me ? <Redirect to="/" /> : <ForgotPasswordPage />}
+      </Route>
+      <Route path="/reset-password">
+        <ResetPasswordPage />
+      </Route>
+      <Route path="/mfa/verify">
+        {me ? <Redirect to="/" /> : <MfaVerifyPage onAuthed={setMe} />}
+      </Route>
+      <Route path="/invite/accept">
+        <AcceptInvitePage onAuthed={setMe} />
+      </Route>
+      <Route path="/mfa/enroll">
+        {me ? <MfaEnrollPage /> : <Redirect to="/login" />}
       </Route>
       <Route>
         {me ? (

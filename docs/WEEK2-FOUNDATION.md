@@ -57,7 +57,7 @@ Password policy: ≥12 characters, upper, lower, digit, special, no spaces.
 
 Production cookies: `httpOnly`, `secure`, `SameSite=strict`, 8-hour rolling session. Login calls `session.regenerate`.
 
-MFA: `getMfaStatus()` always reports stubbed/disabled. `beginMfaEnrollment` / `verifyMfaChallenge` throw.
+MFA: stubbed in Week 2. **Replaced in Week 3** — see [WEEK3-AUTH.md](./WEEK3-AUTH.md).
 
 ---
 
@@ -136,8 +136,10 @@ Thin shell: sign-in, register (creates org + practice), dashboard that shows **p
 
 ## Next foundation steps (not this week)
 
+Week 3 landed TOTP MFA, password reset, and invites (email still a stub). Remaining:
+
 1. Postgres RLS on `org_id` / `practice_id` as defense in depth
-2. Real MFA (TOTP)
-3. Invite flow + email (Resend BAA, no PHI in mail)
-4. Generic CSV/Excel import with raw-row TTL
-5. Expand audit to every PHI table as those APIs appear
+2. Resend (BAA, no PHI in mail) — adapter documented in WEEK3-AUTH.md
+3. Generic CSV/Excel import with raw-row TTL
+4. Expand audit to every PHI table as those APIs appear
+5. Session list/revoke and a shared MFA-challenge store for multi-instance
