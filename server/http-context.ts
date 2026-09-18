@@ -1,3 +1,4 @@
+import type { BillingContext } from "./billing/stripe";
 import type { AppStorage } from "./storage/types";
 import type { Mailer } from "./mailer/types";
 import type { MfaChallengeStore } from "./auth/mfa-challenges";
@@ -11,4 +12,5 @@ export type HttpContext = {
   now: () => Date;
   mfaChallenges: MfaChallengeStore;
   forgotPasswordLimiter: SlidingWindowLimiter;
+  billing: BillingContext;
 };

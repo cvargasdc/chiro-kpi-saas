@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { api, type MeResponse, type Patient } from "../lib/api";
+import { api, type BillingStatus, type MeResponse, type Patient } from "../lib/api";
 
 type Props = { me: MeResponse; onLogout: () => void };
 
@@ -13,9 +13,12 @@ export default function DashboardPage({ me, onLogout }: Props) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("staff");
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [billingError, setBillingError] = useState("");
   const practiceName = me.active?.practiceName ?? "No practice selected";
   const canWrite = me.active?.role && me.active.role !== "readonly";
   const canInvite = me.active?.role === "owner" || me.active?.role === "admin";
+  const canManageBilling = canInvite;
 
   async function loadPatients() {
     const data = await api<{ patients: Patient[] }>("/api/patients");
@@ -30,9 +33,15 @@ export default function DashboardPage({ me, onLogout }: Props) {
     setInvites(data.invites);
   }
 
+  async function loadBilling() {
+    const data = await api<BillingStatus>("/api/billing/status");
+    setBilling(data);
+  }
+
   useEffect(() => {
     loadPatients().catch(() => setPatients([]));
     loadInvites().catch(() => setInvites([]));
+    loadBilling().catch(() => setBilling(null));
   }, []);
 
   async function logout() {
@@ -86,6 +95,13 @@ export default function DashboardPage({ me, onLogout }: Props) {
           <Stat label="Organization" value={me.active?.orgName ?? "—"} />
           <Stat label="Patients" value={String(patients.length)} />
         </section>
+
+        <BillingCard
+          billing={billing}
+          error={billingError}
+          canManage={Boolean(canManageBilling)}
+          onError={setBillingError}
+        />
 
         <section className="bg-white shadow-card rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -242,6 +258,80 @@ function TeamInvites({
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+function BillingCard({
+  billing,
+  error,
+  canManage,
+  onError,
+}: {
+  billing: BillingStatus | null;
+  error: string;
+  canManage: boolean;
+  onError: (msg: string) => void;
+}) {
+  const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
+  const status = billing?.subscriptionStatus ?? "unknown";
+  const plan = billing?.plan ?? "—";
+  const trial =
+    billing?.trialEndsAt && status === "trialing"
+      ? new Date(billing.trialEndsAt).toLocaleDateString()
+      : null;
+
+  async function openSession(path: "/api/billing/checkout-session" | "/api/billing/portal-session") {
+    onError("");
+    setBusy(path.includes("checkout") ? "checkout" : "portal");
+    try {
+      const data = await api<{ url: string }>(path, { method: "POST" });
+      if (data.url) {
+        window.location.assign(data.url);
+      }
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Billing request failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="bg-white shadow-card rounded-2xl p-6 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold">Billing</h2>
+        <span className="text-xs rounded-full bg-slate-100 text-slate-700 px-2 py-1 capitalize">
+          {status}
+        </span>
+      </div>
+      <p className="text-sm text-ink-500">
+        Plan {plan}
+        {trial ? ` · trial ends ${trial}` : ""}
+        {billing?.enforce ? " · enforcement on" : " · local/dev (not enforced)"}
+      </p>
+      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {canManage ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => openSession("/api/billing/checkout-session")}
+            className="rounded-lg bg-accent-500 text-white px-4 py-2 font-medium hover:bg-accent-600 disabled:opacity-50"
+          >
+            {busy === "checkout" ? "Opening…" : "Subscribe"}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => openSession("/api/billing/portal-session")}
+            className="rounded-lg border border-slate-200 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50"
+          >
+            {busy === "portal" ? "Opening…" : "Manage billing"}
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-500">Owner and admin manage billing for this organization.</p>
       )}
     </section>
   );

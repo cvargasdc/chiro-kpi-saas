@@ -11,6 +11,7 @@ import type {
   NewAuditLog,
   PatientWrite,
   StoredAuditLog,
+  OrganizationPatch,
   StoredInvitation,
   StoredOrgMembership,
   StoredOrganization,
@@ -126,6 +127,11 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
       id: randomUUID(),
       name: input.name,
       status: "active",
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      plan: null,
+      subscriptionStatus: "incomplete",
+      trialEndsAt: null,
       createdAt: now(),
     };
     this.organizations.set(org.id, org);
@@ -134,6 +140,50 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
 
   async getOrganization(id: string): Promise<StoredOrganization | undefined> {
     return this.organizations.get(id);
+  }
+
+  async updateOrganization(
+    id: string,
+    patch: OrganizationPatch,
+  ): Promise<StoredOrganization | undefined> {
+    const org = this.organizations.get(id);
+    if (!org) return undefined;
+    if (patch.name !== undefined) org.name = patch.name;
+    if (patch.status !== undefined) org.status = patch.status;
+    if (patch.stripeCustomerId !== undefined) {
+      org.stripeCustomerId = patch.stripeCustomerId;
+    }
+    if (patch.stripeSubscriptionId !== undefined) {
+      org.stripeSubscriptionId = patch.stripeSubscriptionId;
+    }
+    if (patch.plan !== undefined) org.plan = patch.plan;
+    if (patch.subscriptionStatus !== undefined) {
+      org.subscriptionStatus = patch.subscriptionStatus;
+    }
+    if (patch.trialEndsAt !== undefined) org.trialEndsAt = patch.trialEndsAt;
+    return org;
+  }
+
+  async getOrganizationByStripeCustomerId(
+    stripeCustomerId: string,
+  ): Promise<StoredOrganization | undefined> {
+    if (!stripeCustomerId) return undefined;
+    return [...this.organizations.values()].find(
+      (org) => org.stripeCustomerId === stripeCustomerId,
+    );
+  }
+
+  async getOrganizationByStripeSubscriptionId(
+    stripeSubscriptionId: string,
+  ): Promise<StoredOrganization | undefined> {
+    if (!stripeSubscriptionId) return undefined;
+    return [...this.organizations.values()].find(
+      (org) => org.stripeSubscriptionId === stripeSubscriptionId,
+    );
+  }
+
+  async listPracticesForOrg(orgId: string): Promise<StoredPractice[]> {
+    return [...this.practices.values()].filter((p) => p.orgId === orgId);
   }
 
   async createPractice(input: {

@@ -48,14 +48,41 @@ export const accountStatusEnum = pgEnum("account_status", [
   "disabled",
 ]);
 
-export const organizations = pgTable("organizations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  status: accountStatusEnum("status").notNull().default("active"),
-  billingCustomerId: text("billing_customer_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/**
+ * Stripe subscription lifecycle. Billing is per organization (not per practice).
+ * Never store patient PHI on this table or send it to Stripe.
+ */
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "incomplete",
+]);
+
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    status: accountStatusEnum("status").notNull().default("active"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    plan: text("plan"),
+    subscriptionStatus: subscriptionStatusEnum("subscription_status")
+      .notNull()
+      .default("incomplete"),
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("organizations_stripe_customer_id_unique").on(table.stripeCustomerId),
+    uniqueIndex("organizations_stripe_subscription_id_unique").on(
+      table.stripeSubscriptionId,
+    ),
+  ],
+);
 
 export const practices = pgTable(
   "practices",

@@ -14,6 +14,13 @@ export type AppConfig = {
   resendFrom: string | undefined;
   forceHttps: boolean;
   trustProxy: boolean;
+  stripeSecretKey: string | undefined;
+  stripeWebhookSecret: string | undefined;
+  stripePriceId: string | undefined;
+  stripePublishableKey: string | undefined;
+  billingRequireStripe: boolean;
+  billingEnforce: boolean;
+  billingTrialDays: number;
 };
 
 const PLACEHOLDER_SECRET = /^(replace-with|changeme|change-me|your-|todo|placeholder|test-|secret$)/i;
@@ -94,6 +101,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const cookieSecure = isProduction || env.COOKIE_SECURE === "true";
 
+  const billingRequireStripe = env.BILLING_REQUIRE_STRIPE === "true";
+  const billingEnforce =
+    env.BILLING_ENFORCE === "true" ||
+    (isProduction && env.BILLING_ENFORCE !== "false");
+  const trialRaw = Number(env.BILLING_TRIAL_DAYS ?? 14);
+  const billingTrialDays =
+    Number.isFinite(trialRaw) && trialRaw > 0 ? Math.floor(trialRaw) : 14;
+
+  const stripeSecretKey = env.STRIPE_SECRET_KEY?.trim() || undefined;
+  const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET?.trim() || undefined;
+  const stripePriceId = env.STRIPE_PRICE_ID?.trim() || undefined;
+  const stripePublishableKey = env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined;
+
+  if (isProduction && billingRequireStripe) {
+    if (!stripeSecretKey) {
+      throw new Error(
+        "STRIPE_SECRET_KEY is required when BILLING_REQUIRE_STRIPE=true in production.",
+      );
+    }
+    if (!stripeWebhookSecret) {
+      throw new Error(
+        "STRIPE_WEBHOOK_SECRET is required when BILLING_REQUIRE_STRIPE=true in production.",
+      );
+    }
+    if (!stripePriceId) {
+      throw new Error(
+        "STRIPE_PRICE_ID is required when BILLING_REQUIRE_STRIPE=true in production.",
+      );
+    }
+  }
+
   return {
     nodeEnv,
     isProduction,
@@ -110,5 +148,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     resendFrom: env.RESEND_FROM?.trim() || undefined,
     forceHttps,
     trustProxy,
+    stripeSecretKey,
+    stripeWebhookSecret,
+    stripePriceId,
+    stripePublishableKey,
+    billingRequireStripe,
+    billingEnforce,
+    billingTrialDays,
   };
 }

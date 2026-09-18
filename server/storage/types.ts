@@ -1,3 +1,4 @@
+import type { SubscriptionStatus } from "@shared/billing";
 import type { MembershipRole } from "@shared/roles";
 import type { TenantScope } from "../tenant/scope";
 import type { AuditLogQuery } from "./audit-query";
@@ -37,8 +38,23 @@ export type StoredOrganization = {
   id: string;
   name: string;
   status: "active" | "suspended" | "disabled";
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  plan: string | null;
+  subscriptionStatus: SubscriptionStatus;
+  trialEndsAt: Date | null;
   createdAt: Date;
 };
+
+export type OrganizationPatch = Partial<{
+  name: string;
+  status: StoredOrganization["status"];
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  plan: string | null;
+  subscriptionStatus: SubscriptionStatus;
+  trialEndsAt: Date | null;
+}>;
 
 export type StoredPractice = {
   id: string;
@@ -152,6 +168,17 @@ export interface AppStorage {
 
   createOrganization(input: { name: string }): Promise<StoredOrganization>;
   getOrganization(id: string): Promise<StoredOrganization | undefined>;
+  updateOrganization(
+    id: string,
+    patch: OrganizationPatch,
+  ): Promise<StoredOrganization | undefined>;
+  getOrganizationByStripeCustomerId(
+    stripeCustomerId: string,
+  ): Promise<StoredOrganization | undefined>;
+  getOrganizationByStripeSubscriptionId(
+    stripeSubscriptionId: string,
+  ): Promise<StoredOrganization | undefined>;
+  listPracticesForOrg(orgId: string): Promise<StoredPractice[]>;
 
   createPractice(input: {
     orgId: string;

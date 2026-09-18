@@ -27,7 +27,12 @@ export type AuditAction =
   | "mfa_enroll_started"
   | "mfa_enroll_completed"
   | "mfa_disabled"
-  | "mfa_verified";
+  | "mfa_verified"
+  | "billing_customer_provisioned"
+  | "billing_checkout_completed"
+  | "billing_subscription_updated"
+  | "billing_subscription_deleted"
+  | "billing_payment_failed";
 
 export type LogAuditInput = {
   orgId: string;

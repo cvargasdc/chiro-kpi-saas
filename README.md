@@ -4,7 +4,7 @@ Multi-tenant practice KPI software for chiropractic clinics. This tree is a **gr
 
 **Path B:** treat patient identity, contact, clinical notes, and joinable operational rows as **ePHI from day one**.
 
-Week 4 hardens the foundation (security headers, secrets fail-fast, field-level encryption, audit expansion, backup + CI/deploy spine) on Week 3 auth. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
+Week 5 adds Stripe test-mode subscriptions (org-level, no PHI in Stripe), practice provisioning polish, and dotenv auto-load on top of Week 4 hardening. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
 
 ---
 
@@ -16,7 +16,8 @@ Week 4 hardens the foundation (security headers, secrets fail-fast, field-level 
 | Full PHI posture + audit log + owner/admin audit API | OpenAI (no client, no mapping) |
 | Email/username + password, bcrypt, session cookies, TOTP MFA | ChiroTouch EOD parsers |
 | RBAC: owner, admin, clinician, staff, readonly | SimplePractice-specific import |
-| Password reset + practice invites (email stub) | Stripe / live Resend (adapter documented) |
+| Password reset + practice invites (email stub) | Live Resend (adapter documented) |
+| Stripe test-mode org subscriptions (no PHI) | Live Stripe keys / patient data in Stripe |
 | Patient CRUD stubs, isolated by practice | S3 / Daily Log / Dashboard product |
 | App-layer AES-256-GCM on patient email/phone/DOB | Hardcoded demo secrets |
 | CSV/Excel import **placeholder only** | Any deploy to Replit or production |
@@ -25,6 +26,7 @@ Week 4 hardens the foundation (security headers, secrets fail-fast, field-level 
 
 Read next:
 
+- [docs/WEEK5-BILLING.md](docs/WEEK5-BILLING.md) — Stripe test mode, webhooks, no-PHI rule
 - [docs/WEEK4-HARDENING.md](docs/WEEK4-HARDENING.md) — headers, encryption, audit API, backups, CI
 - [docs/SECRETS.md](docs/SECRETS.md) — env var → Secrets Manager names
 - [docs/BACKUPS.md](docs/BACKUPS.md) — dump/restore drill
@@ -59,13 +61,15 @@ npx drizzle-kit push
 npm run dev
 ```
 
-Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization and a practice. The dashboard shows the practice name.
+`npm run dev` auto-loads `.env` via `dotenv` (development only). Values already set in the environment are **not** overridden, so you do not need `source .env`. Production does not read a `.env` file.
+
+Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows the practice name, plan, and subscription status.
 
 ### Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Isolation, auth, encryption, audit, schema tests |
+| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), schema tests |
 | `npm run check` | TypeScript |
 | `npm run build` | Production client bundle → `dist/public` |
 | `npm run db:push` | Push Drizzle schema to local Postgres |
@@ -102,10 +106,18 @@ Never commit `.env`. Never paste production credentials into this repo. There is
 | `PHI_ENCRYPTION_KEY` | Patient email, phone, DOB at rest (AES-256-GCM) |
 | `FORCE_HTTPS` | Optional HTTP→HTTPS redirect (`true` to enable) |
 | `DATABASE_URL` | Postgres |
+| `STRIPE_SECRET_KEY` | Stripe **test** secret (`sk_test_…`). Never commit live keys. |
+| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret (`whsec_…`) |
+| `STRIPE_PRICE_ID` | Recurring Price id |
+| `STRIPE_PUBLISHABLE_KEY` | Test publishable key (docs / later UI) |
+| `BILLING_ENFORCE` | When `true`, block PHI writes unless status is `trialing` or `active` |
+| `BILLING_REQUIRE_STRIPE` | When `true` in production, fail-fast without Stripe keys |
 
 Production refuses to start if the required secrets are missing, weak, or placeholders. Mapping onto AWS Secrets Manager: [docs/SECRETS.md](docs/SECRETS.md).
 
 Password-reset and invite mail is still a **stub** (log / in-memory outbox). How to attach Resend later is in [docs/WEEK3-AUTH.md](docs/WEEK3-AUTH.md).
+
+Stripe setup, webhook forwarding (`stripe listen`), and the **no PHI in Stripe** rule: [docs/WEEK5-BILLING.md](docs/WEEK5-BILLING.md).
 
 RDS encryption-at-rest is still required in AWS. Field-level encryption is defense in depth, not a substitute.
 

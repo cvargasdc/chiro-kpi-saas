@@ -1,4 +1,7 @@
+import { config as loadDotenv } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+
+loadDotenv({ override: false });
 
 const url =
   process.env.DATABASE_URL ??

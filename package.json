@@ -1,10 +1,10 @@
 {
   "name": "chiro-kpi-saas",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
-  "description": "Chiro-KPI Path B rebuild — multi-tenant HIPAA-oriented practice KPI SaaS (Week 4 hardening)",
+  "description": "Chiro-KPI Path B rebuild — multi-tenant HIPAA-oriented practice KPI SaaS (Week 5 billing)",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build",
@@ -19,6 +19,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "connect-pg-simple": "^10.0.0",
+    "dotenv": "^18.0.0",
     "drizzle-orm": "^0.39.3",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
@@ -27,6 +28,7 @@
     "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "stripe": "^22.6.2",
     "wouter": "^3.3.5",
     "zod": "^3.24.2"
   },

@@ -58,3 +58,13 @@ export type Patient = {
   condition: string | null;
   status: string;
 };
+
+export type BillingStatus = {
+  plan: string | null;
+  subscriptionStatus: string;
+  trialEndsAt: string | null;
+  stripeCustomerId: string | null;
+  hasStripeCustomer: boolean;
+  entitled: boolean;
+  enforce: boolean;
+};

@@ -8,6 +8,7 @@ import type { AuditLogQuery } from "./audit-query";
 import type {
   AppStorage,
   NewAuditLog,
+  OrganizationPatch,
   PatientWrite,
   StoredAuditLog,
   StoredInvitation,
@@ -39,6 +40,20 @@ function mapUser(row: schema.User): StoredUser {
     mfaEnrolledAt: row.mfaEnrolledAt,
     credentialsChangedAt: row.credentialsChangedAt,
     lastLoginAt: row.lastLoginAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function mapOrganization(row: schema.Organization): StoredOrganization {
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    stripeCustomerId: row.stripeCustomerId,
+    stripeSubscriptionId: row.stripeSubscriptionId,
+    plan: row.plan,
+    subscriptionStatus: row.subscriptionStatus,
+    trialEndsAt: row.trialEndsAt,
     createdAt: row.createdAt,
   };
 }
@@ -198,12 +213,7 @@ export class DrizzleStorage implements AppStorage {
       .insert(schema.organizations)
       .values({ name: input.name })
       .returning();
-    return {
-      id: row.id,
-      name: row.name,
-      status: row.status,
-      createdAt: row.createdAt,
-    };
+    return mapOrganization(row);
   }
 
   async getOrganization(id: string): Promise<StoredOrganization | undefined> {
@@ -212,13 +222,76 @@ export class DrizzleStorage implements AppStorage {
       .from(schema.organizations)
       .where(eq(schema.organizations.id, id))
       .limit(1);
-    if (!row) return undefined;
-    return {
+    return row ? mapOrganization(row) : undefined;
+  }
+
+  async updateOrganization(
+    id: string,
+    patch: OrganizationPatch,
+  ): Promise<StoredOrganization | undefined> {
+    const existing = await this.getOrganization(id);
+    if (!existing) return undefined;
+    const [row] = await this.db
+      .update(schema.organizations)
+      .set({
+        name: patch.name ?? existing.name,
+        status: patch.status ?? existing.status,
+        stripeCustomerId:
+          patch.stripeCustomerId === undefined
+            ? existing.stripeCustomerId
+            : patch.stripeCustomerId,
+        stripeSubscriptionId:
+          patch.stripeSubscriptionId === undefined
+            ? existing.stripeSubscriptionId
+            : patch.stripeSubscriptionId,
+        plan: patch.plan === undefined ? existing.plan : patch.plan,
+        subscriptionStatus: patch.subscriptionStatus ?? existing.subscriptionStatus,
+        trialEndsAt:
+          patch.trialEndsAt === undefined ? existing.trialEndsAt : patch.trialEndsAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.organizations.id, id))
+      .returning();
+    return row ? mapOrganization(row) : undefined;
+  }
+
+  async getOrganizationByStripeCustomerId(
+    stripeCustomerId: string,
+  ): Promise<StoredOrganization | undefined> {
+    if (!stripeCustomerId) return undefined;
+    const [row] = await this.db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.stripeCustomerId, stripeCustomerId))
+      .limit(1);
+    return row ? mapOrganization(row) : undefined;
+  }
+
+  async getOrganizationByStripeSubscriptionId(
+    stripeSubscriptionId: string,
+  ): Promise<StoredOrganization | undefined> {
+    if (!stripeSubscriptionId) return undefined;
+    const [row] = await this.db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.stripeSubscriptionId, stripeSubscriptionId))
+      .limit(1);
+    return row ? mapOrganization(row) : undefined;
+  }
+
+  async listPracticesForOrg(orgId: string): Promise<StoredPractice[]> {
+    requireOrgId(orgId);
+    const rows = await this.db
+      .select()
+      .from(schema.practices)
+      .where(eq(schema.practices.orgId, orgId));
+    return rows.map((row) => ({
       id: row.id,
+      orgId: row.orgId,
       name: row.name,
       status: row.status,
       createdAt: row.createdAt,
-    };
+    }));
   }
 
   async createPractice(input: {
@@ -294,10 +367,7 @@ export class DrizzleStorage implements AppStorage {
   ): Promise<Array<StoredOrganization & { role: MembershipRole }>> {
     const rows = await this.db
       .select({
-        id: schema.organizations.id,
-        name: schema.organizations.name,
-        status: schema.organizations.status,
-        createdAt: schema.organizations.createdAt,
+        org: schema.organizations,
         role: schema.orgMemberships.role,
       })
       .from(schema.orgMemberships)
@@ -313,10 +383,7 @@ export class DrizzleStorage implements AppStorage {
         ),
       );
     return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      status: row.status,
-      createdAt: row.createdAt,
+      ...mapOrganization(row.org),
       role: row.role,
     }));
   }

@@ -35,6 +35,15 @@ describe("Path B schema constraints", () => {
     expect(PKG.devDependencies?.openai).toBeUndefined();
   });
 
+  it("stores org-level Stripe billing fields (no PHI columns)", () => {
+    expect(SCHEMA).toMatch(/stripeCustomerId:\s*text\("stripe_customer_id"\)/);
+    expect(SCHEMA).toMatch(/stripeSubscriptionId:\s*text\("stripe_subscription_id"\)/);
+    expect(SCHEMA).toMatch(/subscriptionStatusEnum/);
+    expect(SCHEMA).not.toMatch(/patient_email/);
+    expect(PKG.dependencies?.stripe).toBeDefined();
+    expect(PKG.dependencies?.dotenv).toBeDefined();
+  });
+
   it("stores encrypted DOB as text (ciphertext envelope, not a date type)", () => {
     expect(SCHEMA).toMatch(/dateOfBirth:\s*text\("date_of_birth"\)/);
     expect(SCHEMA).toMatch(/PHI_ENCRYPTION_KEY/);

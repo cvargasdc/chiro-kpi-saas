@@ -2,6 +2,8 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { MfaChallengeStore } from "./auth/mfa-challenges";
 import { SlidingWindowLimiter } from "./auth/rate-limit";
 import { applySession, type SessionConfig } from "./auth/session";
+import { defaultBillingContext, type BillingContext } from "./billing/stripe";
+import { handleStripeWebhook } from "./billing/webhook";
 import type { HttpContext } from "./http-context";
 import { applySecurity } from "./http/security";
 import { logError } from "./log/redact";
@@ -23,6 +25,7 @@ export type CreateAppOptions = {
   now?: () => Date;
   forceHttps?: boolean;
   isProduction?: boolean;
+  billing?: Partial<BillingContext>;
 };
 
 export function createApp(options: CreateAppOptions): Express {
@@ -34,11 +37,6 @@ export function createApp(options: CreateAppOptions): Express {
     forceHttps: options.forceHttps ?? false,
     trustProxy: options.session.trustProxy,
   });
-
-  app.use(express.json({ limit: "1mb" }));
-  app.use(express.urlencoded({ extended: false }));
-
-  applySession(app, options.session);
 
   const ctx: HttpContext = {
     storage: options.storage,
@@ -53,7 +51,22 @@ export function createApp(options: CreateAppOptions): Express {
       FORGOT_PASSWORD_LIMIT,
       FORGOT_PASSWORD_WINDOW_MS,
     ),
+    billing: defaultBillingContext(options.billing),
   };
+
+  // Stripe signature verification requires the raw body. Register before json().
+  app.post(
+    "/api/billing/webhook",
+    express.raw({ type: "application/json", limit: "1mb" }),
+    (req, res, next) => {
+      handleStripeWebhook(req, res, ctx).catch(next);
+    },
+  );
+
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: false }));
+
+  applySession(app, options.session);
 
   registerRoutes(app, ctx);
 

@@ -1,11 +1,14 @@
 import { createServer } from "node:http";
+import { createStripeClient } from "./billing/stripe";
 import { loadConfig } from "./config";
 import { createApp } from "./app";
 import { createDb, createPool } from "./db";
+import { loadEnvFile } from "./load-env";
 import { logError, logInfo } from "./log/redact";
 import { DrizzleStorage } from "./storage/drizzle";
 
 async function main() {
+  loadEnvFile();
   const config = loadConfig();
 
   if (!config.databaseUrl) {
@@ -32,6 +35,17 @@ async function main() {
     publicBaseUrl: config.publicBaseUrl,
     forceHttps: config.forceHttps,
     isProduction: config.isProduction,
+    billing: {
+      stripe: config.stripeSecretKey
+        ? createStripeClient(config.stripeSecretKey)
+        : null,
+      webhookSecret: config.stripeWebhookSecret ?? "",
+      priceId: config.stripePriceId ?? "",
+      publishableKey: config.stripePublishableKey ?? "",
+      requireStripe: config.billingRequireStripe,
+      enforce: config.billingEnforce,
+      trialDays: config.billingTrialDays,
+    },
   });
 
   const httpServer = createServer(app);

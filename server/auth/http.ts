@@ -19,6 +19,8 @@ import { authenticate, getClientIp } from "./middleware";
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from "./password";
 import { generateUrlToken, hashToken } from "./tokens";
 import { logAudit } from "../audit/logAudit";
+import { provisionOrgBilling } from "../billing/provision";
+import { logError } from "../log/redact";
 import { establishSession } from "./establish-session";
 import { logUserAudit } from "./audit-tenant";
 
@@ -138,6 +140,26 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
       userId: user.id,
       role: "owner",
     });
+    try {
+      await provisionOrgBilling({
+        storage,
+        stripe: ctx.billing.stripe,
+        requireStripe: ctx.billing.requireStripe,
+        trialDays: ctx.billing.trialDays,
+        defaultPlan: ctx.billing.defaultPlan,
+        now: ctx.now(),
+        org,
+        ownerEmail: user.email,
+        actorId: user.id,
+        practiceId: practice.id,
+        ipAddress: getClientIp(req),
+      });
+    } catch (err) {
+      logError("[billing] provision during register failed", {
+        orgId: org.id,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
     await storage.touchLastLogin(user.id);
     await establishSession(req, user.id, org.id, practice.id, ctx.now());
     const ip = getClientIp(req);

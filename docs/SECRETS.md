@@ -1,7 +1,7 @@
 # Secrets mapping — Path B
 
 **Audience:** Chris Vargas  
-**As of:** Week 4 hardening (2026-09-18)
+**As of:** Week 5 billing (2026-09-18)
 
 No secrets belong in git. `.env` is gitignored. `.env.example` lists **placeholder names only**.
 
@@ -35,6 +35,10 @@ Suggested secret ids. Create them in the **HIPAA-eligible** AWS account that sig
 | `PHI_ENCRYPTION_KEY` | `chirokpi/prod/PHI_ENCRYPTION_KEY` |
 | `DATABASE_URL` | `chirokpi/prod/DATABASE_URL` |
 | `RESEND_API_KEY` | `chirokpi/prod/RESEND_API_KEY` (unused until mail is wired) |
+| `STRIPE_SECRET_KEY` | `chirokpi/prod/STRIPE_SECRET_KEY` (test mode until go-live; never `sk_live_` in git) |
+| `STRIPE_WEBHOOK_SECRET` | `chirokpi/prod/STRIPE_WEBHOOK_SECRET` |
+| `STRIPE_PRICE_ID` | `chirokpi/prod/STRIPE_PRICE_ID` |
+| `STRIPE_PUBLISHABLE_KEY` | `chirokpi/prod/STRIPE_PUBLISHABLE_KEY` |
 
 Staging can use the `chirokpi/staging/…` prefix.
 

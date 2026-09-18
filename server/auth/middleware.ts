@@ -134,3 +134,15 @@ export function requireRole(...allowed: MembershipRole[]) {
     next();
   };
 }
+
+export function requireOrgRole(...allowed: MembershipRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.orgAccess) {
+      return res.status(403).json({ error: "org_access_denied" });
+    }
+    if (!allowed.includes(req.orgAccess.role)) {
+      return res.status(403).json({ error: "insufficient_role" });
+    }
+    next();
+  };
+}

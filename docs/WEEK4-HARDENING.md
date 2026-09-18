@@ -75,6 +75,6 @@ Patient helpers still require both tenant keys. Isolation tests still fail if th
 
 - Daily Log / Dashboard product features
 - Postgres RLS
-- Live Resend / Stripe / S3
+- Live Resend / S3. Stripe test-mode landed in [WEEK5-BILLING.md](./WEEK5-BILLING.md).
 - Automated PHI key rotation
 - Real App Runner deploy

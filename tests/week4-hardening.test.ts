@@ -87,6 +87,7 @@ describe("production config fail-fast", () => {
     expect(cfg.trustProxy).toBe(true);
     expect(cfg.cookieSecure).toBe(true);
     expect(cfg.phiEncryptionKey).toHaveLength(32);
+    expect(cfg.billingEnforce).toBe(true);
   });
 
   it("rejects missing DATABASE_URL in production", () => {

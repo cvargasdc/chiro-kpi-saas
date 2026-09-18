@@ -7,6 +7,7 @@ import {
   PHI_WRITE_ROLES,
 } from "@shared/roles";
 import { logAudit } from "./audit/logAudit";
+import { logError } from "./log/redact";
 import { publicAuditLog } from "./audit/public";
 import { AUDIT_PAGE_DEFAULT, AUDIT_PAGE_MAX } from "./storage/audit-query";
 import { registerAuthRoutes } from "./auth/http";
@@ -14,9 +15,13 @@ import {
   authenticate,
   getClientIp,
   requireOrgAccess,
+  requireOrgRole,
   requirePracticeMembership,
   requireRole,
 } from "./auth/middleware";
+import { requireActiveSubscription } from "./billing/entitlement";
+import { registerBillingRoutes } from "./billing/http";
+import { provisionOrgBilling } from "./billing/provision";
 import type { HttpContext } from "./http-context";
 import { importNotImplemented } from "./import/csv-excel-stub";
 import { registerInviteRoutes } from "./invites/http";
@@ -61,6 +66,8 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
 
   registerAuthRoutes(app, ctx);
   registerInviteRoutes(app, ctx);
+  registerBillingRoutes(app, ctx);
+  const billingGate = requireActiveSubscription(ctx);
 
   app.post("/api/organizations", auth, async (req, res) => {
     const parsed = createOrgSchema.safeParse(req.body);
@@ -89,6 +96,26 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
       req.session.activePracticeId = practice.id;
     } else {
       req.session.activeOrgId = org.id;
+    }
+    try {
+      await provisionOrgBilling({
+        storage,
+        stripe: ctx.billing.stripe,
+        requireStripe: ctx.billing.requireStripe,
+        trialDays: ctx.billing.trialDays,
+        defaultPlan: ctx.billing.defaultPlan,
+        now: ctx.now(),
+        org,
+        ownerEmail: req.currentUser!.email,
+        actorId: req.currentUser!.id,
+        practiceId: practice?.id ?? null,
+        ipAddress: getClientIp(req),
+      });
+    } catch (err) {
+      logError("[billing] provision during org create failed", {
+        orgId: org.id,
+        error: err instanceof Error ? err.message : "unknown",
+      });
     }
     const ip = getClientIp(req);
     if (practice) {
@@ -119,44 +146,50 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     });
   });
 
-  app.post("/api/practices", auth, orgGate, async (req, res) => {
-    const parsed = createPracticeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "invalid_input" });
-    }
-    if (parsed.data.orgId !== req.orgAccess!.orgId) {
-      return res.status(403).json({ error: "org_access_denied" });
-    }
-    const practice = await storage.createPractice({
-      orgId: req.orgAccess!.orgId,
-      name: parsed.data.name.trim(),
-    });
-    await storage.createPracticeMembership({
-      orgId: req.orgAccess!.orgId,
-      practiceId: practice.id,
-      userId: req.currentUser!.id,
-      role: "owner",
-    });
-    req.session.activeOrgId = practice.orgId;
-    req.session.activePracticeId = practice.id;
-    await logAudit(storage, {
-      orgId: practice.orgId,
-      practiceId: practice.id,
-      actorId: req.currentUser!.id,
-      action: "practice_created",
-      resourceType: "practice",
-      resourceId: practice.id,
-      ipAddress: getClientIp(req),
-    });
-    res.status(201).json({
-      practice: {
-        id: practice.id,
-        name: practice.name,
-        orgId: practice.orgId,
+  app.post(
+    "/api/practices",
+    auth,
+    orgGate,
+    requireOrgRole(...ORG_ADMIN_ROLES),
+    async (req, res) => {
+      const parsed = createPracticeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "invalid_input" });
+      }
+      if (parsed.data.orgId !== req.orgAccess!.orgId) {
+        return res.status(403).json({ error: "org_access_denied" });
+      }
+      const practice = await storage.createPractice({
+        orgId: req.orgAccess!.orgId,
+        name: parsed.data.name.trim(),
+      });
+      await storage.createPracticeMembership({
+        orgId: req.orgAccess!.orgId,
+        practiceId: practice.id,
+        userId: req.currentUser!.id,
         role: "owner",
-      },
-    });
-  });
+      });
+      req.session.activeOrgId = practice.orgId;
+      req.session.activePracticeId = practice.id;
+      await logAudit(storage, {
+        orgId: practice.orgId,
+        practiceId: practice.id,
+        actorId: req.currentUser!.id,
+        action: "practice_created",
+        resourceType: "practice",
+        resourceId: practice.id,
+        ipAddress: getClientIp(req),
+      });
+      res.status(201).json({
+        practice: {
+          id: practice.id,
+          name: practice.name,
+          orgId: practice.orgId,
+          role: "owner",
+        },
+      });
+    },
+  );
 
   app.get("/api/practices", auth, async (req, res) => {
     const practices = await storage.listPracticesForUser(req.currentUser!.id);
@@ -188,7 +221,7 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     res.json({ patients: rows });
   });
 
-  app.post("/api/patients", auth, practiceGate, requireRole(...PHI_WRITE_ROLES), async (req, res) => {
+  app.post("/api/patients", auth, practiceGate, requireRole(...PHI_WRITE_ROLES), billingGate, async (req, res) => {
     const parsed = patientWriteSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
@@ -232,7 +265,7 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     res.json({ patient });
   });
 
-  app.patch("/api/patients/:id", auth, practiceGate, requireRole(...PHI_WRITE_ROLES), async (req, res) => {
+  app.patch("/api/patients/:id", auth, practiceGate, requireRole(...PHI_WRITE_ROLES), billingGate, async (req, res) => {
     const parsed = patientPatchSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "invalid_input" });
@@ -259,7 +292,7 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     res.json({ patient });
   });
 
-  app.delete("/api/patients/:id", auth, practiceGate, requireRole(...PHI_DELETE_ROLES), async (req, res) => {
+  app.delete("/api/patients/:id", auth, practiceGate, requireRole(...PHI_DELETE_ROLES), billingGate, async (req, res) => {
     const tenant = req.tenant!;
     const existing = await storage.getPatient(
       { orgId: tenant.orgId, practiceId: tenant.practiceId },
