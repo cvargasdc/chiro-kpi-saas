@@ -18,6 +18,7 @@ import {
 import { authenticate, getClientIp } from "./middleware";
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from "./password";
 import { generateUrlToken, hashToken } from "./tokens";
+import { logAudit } from "../audit/logAudit";
 import { establishSession } from "./establish-session";
 import { logUserAudit } from "./audit-tenant";
 
@@ -139,6 +140,34 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
     });
     await storage.touchLastLogin(user.id);
     await establishSession(req, user.id, org.id, practice.id, ctx.now());
+    const ip = getClientIp(req);
+    await logAudit(storage, {
+      orgId: org.id,
+      practiceId: practice.id,
+      actorId: user.id,
+      action: "org_created",
+      resourceType: "organization",
+      resourceId: org.id,
+      ipAddress: ip,
+    });
+    await logAudit(storage, {
+      orgId: org.id,
+      practiceId: practice.id,
+      actorId: user.id,
+      action: "practice_created",
+      resourceType: "practice",
+      resourceId: practice.id,
+      ipAddress: ip,
+    });
+    await logAudit(storage, {
+      orgId: org.id,
+      practiceId: practice.id,
+      actorId: user.id,
+      action: "login",
+      resourceType: "session",
+      resourceId: user.id,
+      ipAddress: ip,
+    });
 
     return res.status(201).json({
       user: publicUser(user),
@@ -158,6 +187,17 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
       user?.passwordHash,
     );
     if (!user || user.status !== "active" || !passwordOk) {
+      if (user) {
+        await logUserAudit(storage, {
+          userId: user.id,
+          actorId: user.id,
+          action: "login_failed",
+          resourceType: "session",
+          resourceId: user.id,
+          metadata: { reason: "invalid_credentials" },
+          ipAddress: getClientIp(req),
+        });
+      }
       return res.status(401).json({ error: "invalid_credentials" });
     }
 
@@ -182,6 +222,14 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
       first?.id ?? "",
       ctx.now(),
     );
+    await logUserAudit(storage, {
+      userId: user.id,
+      actorId: user.id,
+      action: "login",
+      resourceType: "session",
+      resourceId: user.id,
+      ipAddress: getClientIp(req),
+    });
 
     return res.json({
       mfaRequired: false,
@@ -192,11 +240,27 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
     });
   });
 
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy(() => {
-      res.clearCookie("chirokpi.sid");
-      res.json({ ok: true });
+  app.post("/api/auth/logout", async (req, res) => {
+    const actorId = req.session.userId ?? null;
+    const orgId = req.session.activeOrgId;
+    const practiceId = req.session.activePracticeId;
+    const ip = getClientIp(req);
+    await new Promise<void>((resolve) => {
+      req.session.destroy(() => resolve());
     });
+    res.clearCookie("chirokpi.sid");
+    if (actorId && orgId && practiceId) {
+      await logAudit(storage, {
+        orgId,
+        practiceId,
+        actorId,
+        action: "logout",
+        resourceType: "session",
+        resourceId: actorId,
+        ipAddress: ip,
+      });
+    }
+    res.json({ ok: true });
   });
 
   app.post("/api/auth/forgot-password", async (req, res) => {
@@ -523,6 +587,15 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
     });
     if (!verified.ok) {
       ctx.mfaChallenges.recordFailure(parsed.data.challengeToken);
+      await logUserAudit(storage, {
+        userId: user.id,
+        actorId: user.id,
+        action: "login_failed",
+        resourceType: "session",
+        resourceId: user.id,
+        metadata: { reason: "invalid_mfa" },
+        ipAddress: getClientIp(req),
+      });
       return res.status(401).json({ error: "invalid_code" });
     }
     ctx.mfaChallenges.consume(parsed.data.challengeToken);
@@ -540,13 +613,22 @@ export function registerAuthRoutes(app: Express, ctx: HttpContext): void {
       first?.id ?? "",
       now,
     );
+    const ip = getClientIp(req);
     await logUserAudit(storage, {
       userId: user.id,
       actorId: user.id,
       action: "mfa_verified",
       resourceType: "mfa",
       resourceId: user.id,
-      ipAddress: getClientIp(req),
+      ipAddress: ip,
+    });
+    await logUserAudit(storage, {
+      userId: user.id,
+      actorId: user.id,
+      action: "login",
+      resourceType: "session",
+      resourceId: user.id,
+      ipAddress: ip,
     });
     res.json({
       mfaRequired: false,

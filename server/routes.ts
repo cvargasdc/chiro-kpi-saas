@@ -1,11 +1,14 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import {
+  ORG_ADMIN_ROLES,
   PHI_DELETE_ROLES,
   PHI_READ_ROLES,
   PHI_WRITE_ROLES,
 } from "@shared/roles";
 import { logAudit } from "./audit/logAudit";
+import { publicAuditLog } from "./audit/public";
+import { AUDIT_PAGE_DEFAULT, AUDIT_PAGE_MAX } from "./storage/audit-query";
 import { registerAuthRoutes } from "./auth/http";
 import {
   authenticate,
@@ -87,6 +90,27 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     } else {
       req.session.activeOrgId = org.id;
     }
+    const ip = getClientIp(req);
+    if (practice) {
+      await logAudit(storage, {
+        orgId: org.id,
+        practiceId: practice.id,
+        actorId: req.currentUser!.id,
+        action: "org_created",
+        resourceType: "organization",
+        resourceId: org.id,
+        ipAddress: ip,
+      });
+      await logAudit(storage, {
+        orgId: org.id,
+        practiceId: practice.id,
+        actorId: req.currentUser!.id,
+        action: "practice_created",
+        resourceType: "practice",
+        resourceId: practice.id,
+        ipAddress: ip,
+      });
+    }
     res.status(201).json({
       organization: { id: org.id, name: org.name },
       practice: practice
@@ -115,6 +139,15 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     });
     req.session.activeOrgId = practice.orgId;
     req.session.activePracticeId = practice.id;
+    await logAudit(storage, {
+      orgId: practice.orgId,
+      practiceId: practice.id,
+      actorId: req.currentUser!.id,
+      action: "practice_created",
+      resourceType: "practice",
+      resourceId: practice.id,
+      ipAddress: getClientIp(req),
+    });
     res.status(201).json({
       practice: {
         id: practice.id,
@@ -250,6 +283,33 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
     });
     res.json({ ok: true });
   });
+
+  app.get(
+    "/api/audit-logs",
+    auth,
+    practiceGate,
+    requireRole(...ORG_ADMIN_ROLES),
+    async (req, res) => {
+      const tenant = req.tenant!;
+      const limitRaw = Number(req.query.limit);
+      const offsetRaw = Number(req.query.offset);
+      const limit = Number.isFinite(limitRaw)
+        ? Math.min(AUDIT_PAGE_MAX, Math.max(1, Math.floor(limitRaw)))
+        : AUDIT_PAGE_DEFAULT;
+      const offset = Number.isFinite(offsetRaw)
+        ? Math.max(0, Math.floor(offsetRaw))
+        : 0;
+      const scope = { orgId: tenant.orgId, practiceId: tenant.practiceId };
+      const [rows, total] = await Promise.all([
+        storage.listAuditLogs(scope, { limit, offset }),
+        storage.countAuditLogs(scope),
+      ]);
+      res.json({
+        logs: rows.map(publicAuditLog),
+        page: { limit, offset, total },
+      });
+    },
+  );
 
   app.get("/api/import", auth, practiceGate, (_req, res) => {
     const stub = importNotImplemented();

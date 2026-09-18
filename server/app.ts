@@ -3,6 +3,8 @@ import { MfaChallengeStore } from "./auth/mfa-challenges";
 import { SlidingWindowLimiter } from "./auth/rate-limit";
 import { applySession, type SessionConfig } from "./auth/session";
 import type { HttpContext } from "./http-context";
+import { applySecurity } from "./http/security";
+import { logError } from "./log/redact";
 import { LoggingMailer } from "./mailer/log";
 import type { Mailer } from "./mailer/types";
 import { registerRoutes } from "./routes";
@@ -19,11 +21,19 @@ export type CreateAppOptions = {
   mfaEncryptionKey?: string;
   publicBaseUrl?: string;
   now?: () => Date;
+  forceHttps?: boolean;
+  isProduction?: boolean;
 };
 
 export function createApp(options: CreateAppOptions): Express {
   const app = express();
-  app.disable("x-powered-by");
+  const isProduction = options.isProduction ?? process.env.NODE_ENV === "production";
+
+  applySecurity(app, {
+    isProduction,
+    forceHttps: options.forceHttps ?? false,
+    trustProxy: options.session.trustProxy,
+  });
 
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: false }));
@@ -49,7 +59,7 @@ export function createApp(options: CreateAppOptions): Express {
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const message = err instanceof Error ? err.message : "internal_error";
-    console.error("[http] unhandled error", message);
+    logError("[http] unhandled error", { error: message });
     if (res.headersSent) return;
     res.status(500).json({ error: "internal_error" });
   });

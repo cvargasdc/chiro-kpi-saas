@@ -2,6 +2,8 @@
 
 Path B isolation (`org_id` + `practice_id` on PHI) is unchanged. No OpenAI. No ChiroTouch parsers. Live Replit / chiro-kpi.com was not touched.
 
+Week 4 hardening (headers, field encryption, expanded audit, backups, CI) is in [WEEK4-HARDENING.md](./WEEK4-HARDENING.md).
+
 ---
 
 ## What landed

@@ -239,9 +239,11 @@ export const patients = pgTable(
       .notNull()
       .references(() => practices.id),
     name: text("name").notNull(),
+    // email, phone, dateOfBirth: AES-256-GCM ciphertext at rest (PHI_ENCRYPTION_KEY).
+    // date_of_birth is text (not date) so the envelope fits. RDS encryption-at-rest is still required.
     email: text("email"),
     phone: text("phone"),
-    dateOfBirth: date("date_of_birth"),
+    dateOfBirth: text("date_of_birth"),
     condition: text("condition"),
     status: text("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

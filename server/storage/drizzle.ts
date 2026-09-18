@@ -1,8 +1,10 @@
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 import type { MembershipRole } from "@shared/roles";
+import { decryptStoredPatient, encryptPhiString } from "../crypto/fields";
 import { requireOrgId, requireTenantScope, type TenantScope } from "../tenant/scope";
+import type { AuditLogQuery } from "./audit-query";
 import type {
   AppStorage,
   NewAuditLog,
@@ -62,7 +64,7 @@ function isPendingInvitation(row: StoredInvitation, nowDate: Date): boolean {
   return !row.acceptedAt && !row.revokedAt && row.expiresAt.getTime() > nowDate.getTime();
 }
 
-function mapPatient(row: schema.Patient): StoredPatient {
+function mapPatientRow(row: schema.Patient): StoredPatient {
   return {
     id: row.id,
     orgId: row.orgId,
@@ -79,7 +81,19 @@ function mapPatient(row: schema.Patient): StoredPatient {
 }
 
 export class DrizzleStorage implements AppStorage {
-  constructor(private readonly db: Db) {}
+  private readonly phiEncryptionKey: string;
+
+  constructor(
+    private readonly db: Db,
+    opts?: { phiEncryptionKey?: string },
+  ) {
+    this.phiEncryptionKey =
+      opts?.phiEncryptionKey ?? process.env.PHI_ENCRYPTION_KEY ?? "";
+  }
+
+  private revealPatient(row: schema.Patient): StoredPatient {
+    return decryptStoredPatient(mapPatientRow(row), this.phiEncryptionKey);
+  }
 
   async createUser(input: {
     email: string;
@@ -508,14 +522,17 @@ export class DrizzleStorage implements AppStorage {
         orgId,
         practiceId,
         name: input.name,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
-        dateOfBirth: input.dateOfBirth ?? null,
+        email: encryptPhiString(input.email ?? null, this.phiEncryptionKey),
+        phone: encryptPhiString(input.phone ?? null, this.phiEncryptionKey),
+        dateOfBirth: encryptPhiString(
+          input.dateOfBirth ?? null,
+          this.phiEncryptionKey,
+        ),
         condition: input.condition ?? null,
         status: input.status ?? "active",
       })
       .returning();
-    return mapPatient(row);
+    return this.revealPatient(row);
   }
 
   async getPatient(
@@ -534,7 +551,7 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .limit(1);
-    return row ? mapPatient(row) : undefined;
+    return row ? this.revealPatient(row) : undefined;
   }
 
   async listPatients(scope: TenantScope): Promise<StoredPatient[]> {
@@ -548,7 +565,7 @@ export class DrizzleStorage implements AppStorage {
           eq(schema.patients.practiceId, practiceId),
         ),
       );
-    return rows.map(mapPatient);
+    return rows.map((row) => this.revealPatient(row));
   }
 
   async updatePatient(
@@ -563,12 +580,18 @@ export class DrizzleStorage implements AppStorage {
       .update(schema.patients)
       .set({
         name: input.name ?? existing.name,
-        email: input.email === undefined ? existing.email : input.email,
-        phone: input.phone === undefined ? existing.phone : input.phone,
+        email:
+          input.email === undefined
+            ? undefined
+            : encryptPhiString(input.email, this.phiEncryptionKey),
+        phone:
+          input.phone === undefined
+            ? undefined
+            : encryptPhiString(input.phone, this.phiEncryptionKey),
         dateOfBirth:
           input.dateOfBirth === undefined
-            ? existing.dateOfBirth
-            : input.dateOfBirth,
+            ? undefined
+            : encryptPhiString(input.dateOfBirth, this.phiEncryptionKey),
         condition:
           input.condition === undefined ? existing.condition : input.condition,
         status: input.status ?? existing.status,
@@ -582,7 +605,7 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning();
-    return row ? mapPatient(row) : undefined;
+    return row ? this.revealPatient(row) : undefined;
   }
 
   async deletePatient(scope: TenantScope, id: string): Promise<boolean> {
@@ -632,17 +655,26 @@ export class DrizzleStorage implements AppStorage {
     };
   }
 
-  async listAuditLogs(scope: TenantScope): Promise<StoredAuditLog[]> {
+  async listAuditLogs(
+    scope: TenantScope,
+    query?: AuditLogQuery,
+  ): Promise<StoredAuditLog[]> {
     const { orgId, practiceId } = requireTenantScope(scope);
-    const rows = await this.db
+    const filters = and(
+      eq(schema.auditLogs.orgId, orgId),
+      eq(schema.auditLogs.practiceId, practiceId),
+    );
+    const base = this.db
       .select()
       .from(schema.auditLogs)
-      .where(
-        and(
-          eq(schema.auditLogs.orgId, orgId),
-          eq(schema.auditLogs.practiceId, practiceId),
-        ),
-      );
+      .where(filters)
+      .orderBy(desc(schema.auditLogs.createdAt));
+    const rows =
+      query?.limit != null
+        ? await base.limit(query.limit).offset(query.offset ?? 0)
+        : query?.offset
+          ? await base.offset(query.offset)
+          : await base;
     return rows.map((row) => ({
       id: row.id,
       orgId: row.orgId,
@@ -655,6 +687,20 @@ export class DrizzleStorage implements AppStorage {
       ipAddress: row.ipAddress,
       createdAt: row.createdAt,
     }));
+  }
+
+  async countAuditLogs(scope: TenantScope): Promise<number> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.orgId, orgId),
+          eq(schema.auditLogs.practiceId, practiceId),
+        ),
+      );
+    return Number(row?.value ?? 0);
   }
 
   async createPasswordResetToken(input: {

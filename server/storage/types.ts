@@ -1,5 +1,6 @@
 import type { MembershipRole } from "@shared/roles";
 import type { TenantScope } from "../tenant/scope";
+import type { AuditLogQuery } from "./audit-query";
 
 export type StoredUser = {
   id: string;
@@ -207,7 +208,8 @@ export interface AppStorage {
   deletePatient(scope: TenantScope, id: string): Promise<boolean>;
 
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
-  listAuditLogs(scope: TenantScope): Promise<StoredAuditLog[]>;
+  listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
+  countAuditLogs(scope: TenantScope): Promise<number>;
 
   createPasswordResetToken(input: {
     userId: string;

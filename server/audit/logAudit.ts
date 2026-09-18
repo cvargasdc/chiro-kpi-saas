@@ -1,3 +1,4 @@
+import { logError } from "../log/redact";
 import type { AppStorage } from "../storage/types";
 import { requireTenantScope, type TenantScope } from "../tenant/scope";
 
@@ -12,8 +13,11 @@ export type AuditAction =
   | "list"
   | "export"
   | "login"
+  | "login_failed"
   | "logout"
   | "denied"
+  | "org_created"
+  | "practice_created"
   | "password_reset_requested"
   | "password_reset_completed"
   | "password_changed"
@@ -63,7 +67,7 @@ export async function logAudit(
       ipAddress: input.ipAddress ?? null,
     });
   } catch (err) {
-    console.error("[AUDIT] Failed to write audit log — PHI access may be untracked", {
+    logError("[AUDIT] Failed to write audit log — PHI access may be untracked", {
       orgId: scope.orgId,
       practiceId: scope.practiceId,
       actorId: input.actorId,

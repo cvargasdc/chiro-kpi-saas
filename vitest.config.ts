@@ -8,6 +8,7 @@ export default defineConfig({
     restoreMocks: true,
     env: {
       MFA_ENCRYPTION_KEY: "test-mfa-encryption-key-min-32-chars!!",
+      PHI_ENCRYPTION_KEY: "test-phi-encryption-key-min-32-chars!!",
       APP_BASE_URL: "http://localhost:5000",
     },
   },

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
+import {
+  decryptStoredPatient,
+  encryptPhiString,
+} from "../crypto/fields";
 import { requireOrgId, requireTenantScope, type TenantScope } from "../tenant/scope";
+import type { AuditLogQuery } from "./audit-query";
 import type {
   AppStorage,
   IsolationProbe,
@@ -28,10 +33,17 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   practices = new Map<string, StoredPractice>();
   orgMemberships: StoredOrgMembership[] = [];
   practiceMemberships: StoredPracticeMembership[] = [];
+  /** Serialized rows — email/phone/DOB are ciphertext when PHI_ENCRYPTION_KEY is set. */
   patients: StoredPatient[] = [];
   auditLogs: StoredAuditLog[] = [];
   passwordResetTokens: StoredPasswordResetToken[] = [];
   invitations: StoredInvitation[] = [];
+  private readonly phiEncryptionKey: string;
+
+  constructor(phiEncryptionKey?: string) {
+    this.phiEncryptionKey =
+      phiEncryptionKey ?? process.env.PHI_ENCRYPTION_KEY ?? "";
+  }
 
   async createUser(input: {
     email: string;
@@ -279,16 +291,19 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
       orgId,
       practiceId,
       name: input.name,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      dateOfBirth: input.dateOfBirth ?? null,
+      email: encryptPhiString(input.email ?? null, this.phiEncryptionKey),
+      phone: encryptPhiString(input.phone ?? null, this.phiEncryptionKey),
+      dateOfBirth: encryptPhiString(
+        input.dateOfBirth ?? null,
+        this.phiEncryptionKey,
+      ),
       condition: input.condition ?? null,
       status: input.status ?? "active",
       createdAt: now(),
       updatedAt: now(),
     };
     this.patients.push(patient);
-    return patient;
+    return decryptStoredPatient(patient, this.phiEncryptionKey);
   }
 
   async getPatient(
@@ -296,16 +311,17 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     id: string,
   ): Promise<StoredPatient | undefined> {
     const { orgId, practiceId } = requireTenantScope(scope);
-    return this.patients.find(
+    const row = this.patients.find(
       (p) => p.id === id && p.orgId === orgId && p.practiceId === practiceId,
     );
+    return row ? decryptStoredPatient(row, this.phiEncryptionKey) : undefined;
   }
 
   async listPatients(scope: TenantScope): Promise<StoredPatient[]> {
     const { orgId, practiceId } = requireTenantScope(scope);
-    return this.patients.filter(
-      (p) => p.orgId === orgId && p.practiceId === practiceId,
-    );
+    return this.patients
+      .filter((p) => p.orgId === orgId && p.practiceId === practiceId)
+      .map((p) => decryptStoredPatient(p, this.phiEncryptionKey));
   }
 
   /**
@@ -322,16 +338,28 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     id: string,
     input: Partial<PatientWrite>,
   ): Promise<StoredPatient | undefined> {
-    const existing = await this.getPatient(scope, id);
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.patients.find(
+      (p) => p.id === id && p.orgId === orgId && p.practiceId === practiceId,
+    );
     if (!existing) return undefined;
     if (input.name !== undefined) existing.name = input.name;
-    if (input.email !== undefined) existing.email = input.email;
-    if (input.phone !== undefined) existing.phone = input.phone;
-    if (input.dateOfBirth !== undefined) existing.dateOfBirth = input.dateOfBirth;
+    if (input.email !== undefined) {
+      existing.email = encryptPhiString(input.email, this.phiEncryptionKey);
+    }
+    if (input.phone !== undefined) {
+      existing.phone = encryptPhiString(input.phone, this.phiEncryptionKey);
+    }
+    if (input.dateOfBirth !== undefined) {
+      existing.dateOfBirth = encryptPhiString(
+        input.dateOfBirth,
+        this.phiEncryptionKey,
+      );
+    }
     if (input.condition !== undefined) existing.condition = input.condition;
     if (input.status !== undefined) existing.status = input.status;
     existing.updatedAt = now();
-    return existing;
+    return decryptStoredPatient(existing, this.phiEncryptionKey);
   }
 
   async deletePatient(scope: TenantScope, id: string): Promise<boolean> {
@@ -365,11 +393,25 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     return row;
   }
 
-  async listAuditLogs(scope: TenantScope): Promise<StoredAuditLog[]> {
+  async listAuditLogs(
+    scope: TenantScope,
+    query?: AuditLogQuery,
+  ): Promise<StoredAuditLog[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    let rows = this.auditLogs
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    if (query?.offset) rows = rows.slice(query.offset);
+    if (query?.limit != null) rows = rows.slice(0, query.limit);
+    return rows;
+  }
+
+  async countAuditLogs(scope: TenantScope): Promise<number> {
     const { orgId, practiceId } = requireTenantScope(scope);
     return this.auditLogs.filter(
       (row) => row.orgId === orgId && row.practiceId === practiceId,
-    );
+    ).length;
   }
 
   async createPasswordResetToken(input: {
@@ -502,6 +544,8 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   }
 }
 
-export function createMemoryStorage(): MemoryStorage {
-  return new MemoryStorage();
+export function createMemoryStorage(opts?: {
+  phiEncryptionKey?: string;
+}): MemoryStorage {
+  return new MemoryStorage(opts?.phiEncryptionKey);
 }

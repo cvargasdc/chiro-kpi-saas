@@ -4,7 +4,7 @@ Multi-tenant practice KPI software for chiropractic clinics. This tree is a **gr
 
 **Path B:** treat patient identity, contact, clinical notes, and joinable operational rows as **ePHI from day one**.
 
-Week 3 hardens auth (password reset, practice invites, TOTP MFA, RBAC on writes) on the Week 2 foundation. It does **not** replace chiro-kpi.com.
+Week 4 hardens the foundation (security headers, secrets fail-fast, field-level encryption, audit expansion, backup + CI/deploy spine) on Week 3 auth. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
 
 ---
 
@@ -13,27 +13,33 @@ Week 3 hardens auth (password reset, practice invites, TOTP MFA, RBAC on writes)
 | In v1 / this foundation | Out (do not expect them here) |
 |-------------------------|--------------------------------|
 | Organizations → practices → memberships | Replit Auth / impersonation |
-| Full PHI posture + audit log skeleton | OpenAI (no client, no mapping) |
+| Full PHI posture + audit log + owner/admin audit API | OpenAI (no client, no mapping) |
 | Email/username + password, bcrypt, session cookies, TOTP MFA | ChiroTouch EOD parsers |
 | RBAC: owner, admin, clinician, staff, readonly | SimplePractice-specific import |
 | Password reset + practice invites (email stub) | Stripe / live Resend (adapter documented) |
 | Patient CRUD stubs, isolated by practice | S3 / Daily Log / Dashboard product |
-| CSV/Excel import **placeholder only** | Hardcoded demo secrets |
-| Local Docker Postgres | Any deploy to Replit or production |
+| App-layer AES-256-GCM on patient email/phone/DOB | Hardcoded demo secrets |
+| CSV/Excel import **placeholder only** | Any deploy to Replit or production |
+| Local Docker Postgres + backup script skeleton | GitHub holding production PHI |
+| Helmet, production fail-fast secrets, CI workflow | |
 
 Read next:
 
+- [docs/WEEK4-HARDENING.md](docs/WEEK4-HARDENING.md) — headers, encryption, audit API, backups, CI
+- [docs/SECRETS.md](docs/SECRETS.md) — env var → Secrets Manager names
+- [docs/BACKUPS.md](docs/BACKUPS.md) — dump/restore drill
+- [docs/DEPLOY-STAGING.md](docs/DEPLOY-STAGING.md) — App Runner / BAA checklist
 - [docs/WEEK3-AUTH.md](docs/WEEK3-AUTH.md) — password reset, invites, TOTP MFA
 - [docs/WEEK2-FOUNDATION.md](docs/WEEK2-FOUNDATION.md) — schema, isolation, audit skeleton
 - [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) — threats and controls
-- [docs/BAA-VENDORS.md](docs/BAA-VENDORS.md) — AWS, Stripe, Resend in; **OpenAI out**
+- [docs/BAA-VENDORS.md](docs/BAA-VENDORS.md) — AWS, Stripe, Resend in; **OpenAI out**; GitHub is not a BAA vendor
 - [WEEK1-BRIEFING.md](WEEK1-BRIEFING.md) — inventory of the legacy app
 
 ---
 
 ## Stack
 
-TypeScript, React 18, Vite, Express, Drizzle ORM, PostgreSQL, Tailwind. Tests: Vitest.
+TypeScript, React 18, Vite, Express, Drizzle ORM, PostgreSQL, Tailwind. Tests: Vitest. CI: GitHub Actions.
 
 ---
 
@@ -43,8 +49,9 @@ You need Node 20+ and Docker (for Postgres).
 
 ```bash
 cp .env.example .env
-# Set SESSION_SECRET and MFA_ENCRYPTION_KEY to long random values, e.g.:
+# Set SESSION_SECRET, MFA_ENCRYPTION_KEY, and PHI_ENCRYPTION_KEY to long random values:
 #   openssl rand -hex 32
+# PHI_ENCRYPTION_KEY must be different from MFA_ENCRYPTION_KEY.
 
 docker compose up -d
 npm install
@@ -58,10 +65,11 @@ Open [http://localhost:5000](http://localhost:5000). Register a user — that cr
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Isolation, auth (reset/invite/MFA/RBAC), audit, schema tests |
+| `npm test` | Isolation, auth, encryption, audit, schema tests |
 | `npm run check` | TypeScript |
 | `npm run build` | Production client bundle → `dist/public` |
 | `npm run db:push` | Push Drizzle schema to local Postgres |
+| `npm run backup:db` | `pg_dump` into `backups/` (gitignored). No-ops if tools are missing |
 
 `npm test` does **not** need Postgres. It uses an in-memory store.
 
@@ -79,7 +87,7 @@ To see the test fail when the filter is removed: delete the `practiceId` predica
 
 ## Audit retention
 
-`logAudit(...)` is wired into patient create / read / update / delete / list. HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
+`logAudit(...)` is wired into patient CRUD, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
 
 ---
 
@@ -87,11 +95,23 @@ To see the test fail when the filter is removed: delete the `practiceId` predica
 
 Never commit `.env`. Never paste production credentials into this repo. There is no seed-demo password in source.
 
-`MFA_ENCRYPTION_KEY` encrypts TOTP secrets at rest. Password-reset and invite mail is a **stub** in Week 3 (log / in-memory outbox). How to attach Resend later is in [docs/WEEK3-AUTH.md](docs/WEEK3-AUTH.md).
+| Variable | Role |
+|----------|------|
+| `SESSION_SECRET` | Session cookies (required) |
+| `MFA_ENCRYPTION_KEY` | TOTP secrets at rest |
+| `PHI_ENCRYPTION_KEY` | Patient email, phone, DOB at rest (AES-256-GCM) |
+| `FORCE_HTTPS` | Optional HTTP→HTTPS redirect (`true` to enable) |
+| `DATABASE_URL` | Postgres |
+
+Production refuses to start if the required secrets are missing, weak, or placeholders. Mapping onto AWS Secrets Manager: [docs/SECRETS.md](docs/SECRETS.md).
+
+Password-reset and invite mail is still a **stub** (log / in-memory outbox). How to attach Resend later is in [docs/WEEK3-AUTH.md](docs/WEEK3-AUTH.md).
+
+RDS encryption-at-rest is still required in AWS. Field-level encryption is defense in depth, not a substitute.
 
 ---
 
-## Production cookie config
+## Production cookie / TLS config
 
 When `NODE_ENV=production`:
 
@@ -99,7 +119,9 @@ When `NODE_ENV=production`:
 - `sameSite: "strict"`
 - `httpOnly: true`
 - 8-hour rolling session
-- `trust proxy` enabled for TLS terminators
+- `trust proxy` enabled for TLS terminators (App Runner / ALB)
+
+TLS terminates at the load balancer. The app assumes HTTPS in production. Do not set `FORCE_HTTPS=true` on App Runner unless health checks send `X-Forwarded-Proto: https`.
 
 ---
 

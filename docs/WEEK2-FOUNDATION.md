@@ -136,7 +136,7 @@ Thin shell: sign-in, register (creates org + practice), dashboard that shows **p
 
 ## Next foundation steps (not this week)
 
-Week 3 landed TOTP MFA, password reset, and invites (email still a stub). Remaining:
+Week 3 landed TOTP MFA, password reset, and invites (email still a stub). Week 4 landed headers, field encryption, expanded audit, backups, and a CI/deploy spine — see [WEEK4-HARDENING.md](./WEEK4-HARDENING.md). Remaining:
 
 1. Postgres RLS on `org_id` / `practice_id` as defense in depth
 2. Resend (BAA, no PHI in mail) — adapter documented in WEEK3-AUTH.md

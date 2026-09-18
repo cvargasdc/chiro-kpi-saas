@@ -35,6 +35,12 @@ describe("Path B schema constraints", () => {
     expect(PKG.devDependencies?.openai).toBeUndefined();
   });
 
+  it("stores encrypted DOB as text (ciphertext envelope, not a date type)", () => {
+    expect(SCHEMA).toMatch(/dateOfBirth:\s*text\("date_of_birth"\)/);
+    expect(SCHEMA).toMatch(/PHI_ENCRYPTION_KEY/);
+    expect(PKG.dependencies?.helmet).toBeDefined();
+  });
+
   it("stores hashed password-reset tokens and tenant-scoped invites", () => {
     expect(passwordResetTokens.tokenHash).toBeDefined();
     expect(passwordResetTokens.userId.notNull).toBe(true);
