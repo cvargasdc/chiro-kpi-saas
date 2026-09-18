@@ -1,0 +1,55 @@
+name: Deploy staging
+
+# Manual only. Do not auto-deploy from main until environment protection
+# and OIDC are configured. This workflow is a spine, not a live deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type deploy-staging to confirm"
+        required: true
+        default: ""
+
+# Optional later:
+#   push:
+#     branches: [main]
+# with: if: false
+# plus GitHub Environment "staging" with required reviewers.
+
+jobs:
+  deploy-staging:
+    name: stub
+    runs-on: ubuntu-latest
+    # environment: staging
+    if: ${{ github.event.inputs.confirm == 'deploy-staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — no production PHI in this job
+        run: |
+          echo "Staging deploy stub. This job must not load production DATABASE_URL."
+          echo "GitHub Actions is not covered by the AWS BAA. Keep dumps and PHI out."
+
+      # - name: Configure AWS credentials (OIDC)
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: arn:aws:iam::ACCOUNT_ID:role/chirokpi-staging-gha
+      #     aws-region: us-east-1
+
+      # - name: Pull secrets (map onto env; never echo values)
+      #   run: |
+      #     # aws secretsmanager get-secret-value --secret-id chirokpi/staging/SESSION_SECRET
+      #     # Wire names from docs/SECRETS.md. Do not print SecretString.
+
+      # - name: Build container
+      #   run: |
+      #     docker build -t chiro-kpi-staging:${{ github.sha }} .
+      #     # docker push $ECR_URI:${{ github.sha }}
+
+      # - name: Deploy App Runner / ECS
+      #   run: |
+      #     # aws apprunner start-deployment --service-arn $APP_RUNNER_SERVICE_ARN
+      #     # or: aws ecs update-service --cluster staging --service chiro-kpi --force-new-deployment
+
+      - name: Placeholder complete
+        run: echo "No AWS credentials required. Staging deploy is not wired yet."
