@@ -113,7 +113,7 @@ Wired on patient create, read, update, delete, and list. `AUDIT_RETENTION_YEARS 
 | POST | `/api/practices` | Requires org access |
 | GET | `/api/practices` | Memberships only |
 | CRUD | `/api/patients` | Tenant-scoped stubs |
-| GET/POST | `/api/import` | **501 stub** |
+| GET/POST | `/api/import` | Replaced in Week 13 by `/api/import/upload` and batch routes (generic CSV/Excel) |
 
 ---
 
@@ -140,6 +140,6 @@ Week 3 landed TOTP MFA, password reset, and invites (email still a stub). Week 4
 
 1. Postgres RLS on `org_id` / `practice_id` as defense in depth
 2. Resend (BAA, no PHI in mail) — adapter documented in WEEK3-AUTH.md
-3. Generic CSV/Excel import with raw-row TTL
+3. Generic CSV/Excel import with raw-row TTL — landed in Week 13 (see [WEEK13-METRICS-IMPORT.md](./WEEK13-METRICS-IMPORT.md))
 4. Expand audit to every PHI table as those APIs appear
 5. Session list/revoke and a shared MFA-challenge store for multi-instance

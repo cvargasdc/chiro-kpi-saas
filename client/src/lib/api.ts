@@ -623,6 +623,131 @@ export type ReportTrendPoint = {
   partial: boolean;
 };
 
+export type MetricField = {
+  key: string;
+  label: string;
+  section: "get" | "sell" | "keep";
+  unit: "count" | "usd" | "percent" | "ratio";
+  source: "manual" | "automatic";
+  value: number | null;
+  available: boolean;
+  reason: string | null;
+  formula: string;
+  helpText: string;
+  dependencies: string[];
+  locked: boolean;
+  lockedMessage: string | null;
+  writable: boolean;
+};
+
+export type AdvancedMetricsResponse = {
+  today: string;
+  month: string;
+  from: string;
+  to: string;
+  emptyState: "no_entries" | "zeros_recorded" | "has_data";
+  emptyStateCopy: string | null;
+  dailyLogAvailable: boolean;
+  patientDataAvailable: boolean;
+  totals: {
+    visits: number;
+    revenueCents: number;
+    revenue: number;
+    newPatients: number;
+    convertedCount: number;
+  };
+  sections: Array<{
+    id: "get" | "sell" | "keep";
+    label: string;
+    blurb: string;
+    fields: MetricField[];
+  }>;
+  openai: boolean;
+};
+
+export type ImportTargetField = {
+  value: string;
+  label: string;
+  entity: "daily_log" | "patients";
+  phi: boolean;
+};
+
+export type ImportBatch = {
+  id: string;
+  fileName: string;
+  fileType: string;
+  status: string;
+  totalRows: number;
+  successRows: number;
+  errorRows: number;
+  skippedRows: number;
+  importType: string;
+  headers: string[] | null;
+  mappings: Array<{ sourceColumn: string; targetField: string }> | null;
+  createdBy: string | null;
+  committedAt: string | null;
+  rawExpiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ImportUploadResponse = {
+  batch: ImportBatch;
+  headers: string[];
+  sampleRows: string[][];
+  targetFields: ImportTargetField[];
+  ttlDays: number;
+  openai: boolean;
+  chirotouch: boolean;
+};
+
+export type ImportBatchesResponse = {
+  batches: ImportBatch[];
+  emptyState: "no_batches" | "has_data";
+  ttlDays: number;
+};
+
+export type ImportMapResponse = {
+  batch: ImportBatch;
+};
+
+export type ImportPreviewResponse = {
+  batchId: string;
+  committed: boolean;
+  counts: {
+    totalRows: number;
+    validCount: number;
+    errorCount: number;
+    skippedCount: number;
+    dailyLogCreates: number;
+    patientCreates: number;
+    anomalyWarnings: number;
+  };
+  headers: string[];
+  sample: Array<{
+    rowNumber: number;
+    cells: string[];
+    errors: string[];
+    writesDailyLog: boolean;
+    writesPatient: boolean;
+    warnings: string[];
+  }>;
+  note: string;
+};
+
+export type ImportCommitResponse = {
+  batch: ImportBatch;
+  counts: {
+    successRows: number;
+    errorRows: number;
+    skippedRows: number;
+    dailyLogCreates: number;
+    dailyLogUpdates: number;
+    patientCreates: number;
+  };
+  warnings: Array<{ date: string; code: string }>;
+};
+
 export type ReportPreviewResponse = DashboardResponse & {
   comparisonDefinition: string;
   goals: {

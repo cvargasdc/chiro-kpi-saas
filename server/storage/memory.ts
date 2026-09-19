@@ -6,9 +6,11 @@ import {
   decryptStoredPatient,
   decryptStoredPatientChecklist,
   decryptStoredPatientChecklistTask,
+  decryptStoredImportRow,
   decryptStoredProjectTask,
   encryptCarePlanSensitiveFields,
   encryptPhiString,
+  encryptPhiStringIfKeyed,
 } from "../crypto/fields";
 import { DuplicateDailyLogError } from "../daily-log/errors";
 import { requireOrgId, requireTenantScope, type TenantScope } from "../tenant/scope";
@@ -78,6 +80,14 @@ import type {
   StoredProjectTask,
   ProjectTaskWrite,
   ProjectTaskPatch,
+  StoredAdvancedMetricInput,
+  AdvancedMetricInputWrite,
+  StoredImportBatch,
+  ImportBatchWrite,
+  ImportBatchPatch,
+  StoredImportRow,
+  ImportRowWrite,
+  ImportRowPatch,
 } from "./types";
 import type { MembershipRole } from "@shared/roles";
 
@@ -117,6 +127,10 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   projectColumns: StoredProjectColumn[] = [];
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   projectTasks: StoredProjectTask[] = [];
+  advancedMetricInputs: StoredAdvancedMetricInput[] = [];
+  importBatches: StoredImportBatch[] = [];
+  /** rawData / normalizedData are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  importRows: StoredImportRow[] = [];
   auditLogs: StoredAuditLog[] = [];
   passwordResetTokens: StoredPasswordResetToken[] = [];
   invitations: StoredInvitation[] = [];
@@ -2129,6 +2143,267 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     if (index === -1) return false;
     this.projectTasks.splice(index, 1);
     return true;
+  }
+
+  async listAdvancedMetricInputs(
+    scope: TenantScope,
+    periodMonth?: string,
+  ): Promise<StoredAdvancedMetricInput[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.advancedMetricInputs
+      .filter((row) => {
+        if (row.orgId !== orgId || row.practiceId !== practiceId) return false;
+        if (periodMonth && row.periodMonth !== periodMonth) return false;
+        return true;
+      })
+      .slice()
+      .sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  listAdvancedMetricInputsMissingPracticeFilter(
+    orgId: string,
+  ): StoredAdvancedMetricInput[] {
+    return this.advancedMetricInputs.filter((row) => row.orgId === orgId);
+  }
+
+  async upsertAdvancedMetricInput(
+    scope: TenantScope,
+    input: AdvancedMetricInputWrite,
+  ): Promise<StoredAdvancedMetricInput> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.advancedMetricInputs.find(
+      (row) =>
+        row.orgId === orgId &&
+        row.practiceId === practiceId &&
+        row.periodMonth === input.periodMonth &&
+        row.section === input.section &&
+        row.key === input.key,
+    );
+    const stamp = now();
+    if (existing) {
+      existing.valueNumeric =
+        input.valueNumeric === undefined
+          ? existing.valueNumeric
+          : input.valueNumeric;
+      existing.valueText =
+        input.valueText === undefined ? existing.valueText : input.valueText;
+      existing.source = input.source ?? existing.source;
+      existing.updatedBy =
+        input.updatedBy === undefined ? existing.updatedBy : input.updatedBy;
+      existing.updatedAt = stamp;
+      return { ...existing };
+    }
+    const row: StoredAdvancedMetricInput = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      periodMonth: input.periodMonth,
+      section: input.section,
+      key: input.key,
+      valueNumeric: input.valueNumeric ?? null,
+      valueText: input.valueText ?? null,
+      source: input.source ?? "manual",
+      updatedBy: input.updatedBy ?? null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    this.advancedMetricInputs.push(row);
+    return { ...row };
+  }
+
+  async createImportBatch(
+    scope: TenantScope,
+    input: ImportBatchWrite,
+  ): Promise<StoredImportBatch> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const stamp = now();
+    const row: StoredImportBatch = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      fileName: input.fileName,
+      fileType: input.fileType,
+      status: input.status ?? "uploaded",
+      totalRows: input.totalRows ?? 0,
+      successRows: 0,
+      errorRows: 0,
+      skippedRows: 0,
+      columnMapping: input.columnMapping ?? null,
+      headers: input.headers ?? null,
+      importType: input.importType ?? "daily_log",
+      createdBy: input.createdBy ?? null,
+      errorSummary: null,
+      committedAt: null,
+      rawExpiresAt: input.rawExpiresAt,
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    this.importBatches.push(row);
+    return { ...row, columnMapping: row.columnMapping ? [...row.columnMapping] : null, headers: row.headers ? [...row.headers] : null };
+  }
+
+  async getImportBatch(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredImportBatch | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.importBatches.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    if (!row) return undefined;
+    return {
+      ...row,
+      columnMapping: row.columnMapping ? [...row.columnMapping] : null,
+      headers: row.headers ? [...row.headers] : null,
+    };
+  }
+
+  async listImportBatches(scope: TenantScope): Promise<StoredImportBatch[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.importBatches
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((row) => ({
+        ...row,
+        columnMapping: row.columnMapping ? [...row.columnMapping] : null,
+        headers: row.headers ? [...row.headers] : null,
+      }));
+  }
+
+  listImportBatchesMissingPracticeFilter(orgId: string): StoredImportBatch[] {
+    return this.importBatches.filter((row) => row.orgId === orgId);
+  }
+
+  async updateImportBatch(
+    scope: TenantScope,
+    id: string,
+    input: ImportBatchPatch,
+  ): Promise<StoredImportBatch | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.importBatches.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.status !== undefined) existing.status = input.status;
+    if (input.totalRows !== undefined) existing.totalRows = input.totalRows;
+    if (input.successRows !== undefined) existing.successRows = input.successRows;
+    if (input.errorRows !== undefined) existing.errorRows = input.errorRows;
+    if (input.skippedRows !== undefined) existing.skippedRows = input.skippedRows;
+    if (input.columnMapping !== undefined) {
+      existing.columnMapping = input.columnMapping;
+    }
+    if (input.headers !== undefined) existing.headers = input.headers;
+    if (input.importType !== undefined) existing.importType = input.importType;
+    if (input.errorSummary !== undefined) {
+      existing.errorSummary = input.errorSummary;
+    }
+    if (input.committedAt !== undefined) existing.committedAt = input.committedAt;
+    existing.updatedAt = now();
+    return {
+      ...existing,
+      columnMapping: existing.columnMapping ? [...existing.columnMapping] : null,
+      headers: existing.headers ? [...existing.headers] : null,
+    };
+  }
+
+  async createImportRow(
+    scope: TenantScope,
+    input: ImportRowWrite,
+  ): Promise<StoredImportRow> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const stamp = now();
+    const row: StoredImportRow = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      batchId: input.batchId,
+      rowNumber: input.rowNumber,
+      rawData: encryptPhiStringIfKeyed(input.rawData, this.phiEncryptionKey) ?? "",
+      normalizedData: encryptPhiStringIfKeyed(
+        input.normalizedData ?? null,
+        this.phiEncryptionKey,
+      ),
+      status: input.status ?? "pending",
+      errorMessage: input.errorMessage ?? null,
+      targetEntityType: input.targetEntityType ?? null,
+      targetEntityId: input.targetEntityId ?? null,
+      contentHash: input.contentHash ?? null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    this.importRows.push(row);
+    return decryptStoredImportRow({ ...row }, this.phiEncryptionKey);
+  }
+
+  async listImportRows(
+    scope: TenantScope,
+    batchId: string,
+  ): Promise<StoredImportRow[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.importRows
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          row.batchId === batchId,
+      )
+      .slice()
+      .sort((a, b) => a.rowNumber - b.rowNumber)
+      .map((row) => decryptStoredImportRow({ ...row }, this.phiEncryptionKey));
+  }
+
+  async updateImportRow(
+    scope: TenantScope,
+    id: string,
+    input: ImportRowPatch,
+  ): Promise<StoredImportRow | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.importRows.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.normalizedData !== undefined) {
+      existing.normalizedData = encryptPhiStringIfKeyed(
+        input.normalizedData,
+        this.phiEncryptionKey,
+      );
+    }
+    if (input.status !== undefined) existing.status = input.status;
+    if (input.errorMessage !== undefined) {
+      existing.errorMessage = input.errorMessage;
+    }
+    if (input.targetEntityType !== undefined) {
+      existing.targetEntityType = input.targetEntityType;
+    }
+    if (input.targetEntityId !== undefined) {
+      existing.targetEntityId = input.targetEntityId;
+    }
+    if (input.rawData !== undefined) {
+      existing.rawData =
+        encryptPhiStringIfKeyed(input.rawData, this.phiEncryptionKey) ?? "";
+    }
+    existing.updatedAt = now();
+    return decryptStoredImportRow({ ...existing }, this.phiEncryptionKey);
+  }
+
+  async pruneExpiredImportRawRows(nowDate: Date): Promise<number> {
+    let cleared = 0;
+    for (const batch of this.importBatches) {
+      if (batch.rawExpiresAt.getTime() > nowDate.getTime()) continue;
+      for (const row of this.importRows) {
+        if (row.batchId !== batch.id) continue;
+        if (row.rawData === "" && row.normalizedData == null) continue;
+        row.rawData = "";
+        row.normalizedData = null;
+        row.updatedAt = nowDate;
+        cleared += 1;
+      }
+    }
+    return cleared;
   }
 
   async createAuditLog(input: NewAuditLog): Promise<StoredAuditLog> {

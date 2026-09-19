@@ -14,6 +14,9 @@ import {
   projects,
   projectColumns,
   projectTasks,
+  advancedMetricsInputs,
+  importBatches,
+  importRows,
   practiceChecklists,
   practiceChecklistItems,
   practiceChecklistCompletions,
@@ -51,6 +54,9 @@ describe("Path B schema constraints", () => {
       projects,
       projectColumns,
       projectTasks,
+      advancedMetricsInputs,
+      importBatches,
+      importRows,
       practiceChecklists,
       practiceChecklistItems,
       practiceChecklistCompletions,
@@ -189,6 +195,22 @@ describe("Path B schema constraints", () => {
     expect(projectTasks.orgId.notNull).toBe(true);
     expect(projectTasks.practiceId.notNull).toBe(true);
     expect(SCHEMA).toMatch(/never put titles\/notes in audit metadata/);
+  });
+
+  it("stores advanced metrics inputs and generic import batches with tenant keys", () => {
+    expect(SCHEMA).toMatch(/export const advancedMetricsInputs = pgTable/);
+    expect(SCHEMA).toMatch(/export const importBatches = pgTable/);
+    expect(SCHEMA).toMatch(/export const importRows = pgTable/);
+    expect(SCHEMA).toMatch(
+      /advanced_metrics_inputs_practice_period_section_key_unique/,
+    );
+    expect(advancedMetricsInputs.orgId.notNull).toBe(true);
+    expect(advancedMetricsInputs.practiceId.notNull).toBe(true);
+    expect(importBatches.orgId.notNull).toBe(true);
+    expect(importBatches.practiceId.notNull).toBe(true);
+    expect(importRows.orgId.notNull).toBe(true);
+    expect(importRows.practiceId.notNull).toBe(true);
+    expect(SCHEMA).toMatch(/Raw rows expire after IMPORT_RAW_TTL_DAYS/);
   });
 
   it("does not ship ChiroTouch parsers", () => {

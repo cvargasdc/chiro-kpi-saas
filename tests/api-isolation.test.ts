@@ -124,13 +124,17 @@ describe("API tenant isolation", () => {
     expect(del.status).toBe(403);
   });
 
-  it("import routes are stubs (no parser, no OpenAI)", async () => {
+  it("generic import does not ship OpenAI or ChiroTouch parsers", async () => {
     const { app } = testApp();
-    const a = await register(app, "import");
-    const res = await a.agent.post("/api/import").send({});
-    expect(res.status).toBe(501);
+    const a = await register(app, "importiso");
+    const res = await a.agent.post("/api/import/upload").send({
+      fileName: "days.csv",
+      csv: "Date,Visits,Revenue\n2026-09-01,3,150\n",
+    });
+    expect(res.status).toBe(201);
     expect(res.body.openai).toBe(false);
     expect(res.body.chirotouch).toBe(false);
+    expect(res.body.simplepractice).toBe(false);
   });
 
   it("rejects weak passwords", async () => {

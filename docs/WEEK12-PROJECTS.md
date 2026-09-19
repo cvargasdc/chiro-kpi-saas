@@ -116,4 +116,4 @@ List/read/create/update/delete/duplicate/move/toggle are audited (`resourceType`
 
 ## Out of scope (this week)
 
-Advanced Metrics, CSV import, emailed reports, GHL CRM webhook (stub only), new Stripe work, OpenAI, ChiroTouch.
+Advanced Metrics and CSV import: see [WEEK13-METRICS-IMPORT.md](./WEEK13-METRICS-IMPORT.md). Still out: emailed reports, GHL CRM webhook (stub only), new Stripe work, OpenAI, ChiroTouch.

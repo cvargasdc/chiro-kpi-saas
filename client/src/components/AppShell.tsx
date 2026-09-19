@@ -92,6 +92,17 @@ export default function AppShell({ me, onLogout, children }: Props) {
           <NavLink href="/reports" current={location === "/reports"}>
             Reports
           </NavLink>
+          <NavLink
+            href="/advanced-metrics"
+            current={location === "/advanced-metrics"}
+          >
+            Advanced Metrics
+          </NavLink>
+          {me.active?.role === "owner" || me.active?.role === "admin" ? (
+            <NavLink href="/import" current={location === "/import"}>
+              Import
+            </NavLink>
+          ) : null}
         </nav>
       </header>
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">{children}</main>

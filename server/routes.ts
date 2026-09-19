@@ -16,6 +16,8 @@ import { registerPracticeChecklistRoutes } from "./practice-checklists/http";
 import { registerTreatmentRoutes } from "./treatments/http";
 import { registerCarePlanRoutes } from "./care-plans/http";
 import { registerProjectRoutes } from "./projects/http";
+import { registerAdvancedMetricRoutes } from "./advanced-metrics/http";
+import { registerImportRoutes } from "./import/http";
 import {
   authenticate,
   getClientIp,
@@ -27,7 +29,6 @@ import {
 import { registerBillingRoutes } from "./billing/http";
 import { provisionOrgBilling } from "./billing/provision";
 import type { HttpContext } from "./http-context";
-import { importNotImplemented } from "./import/csv-excel-stub";
 import { registerInviteRoutes } from "./invites/http";
 
 const createOrgSchema = z.object({
@@ -67,6 +68,8 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
   registerTreatmentRoutes(app, ctx);
   registerCarePlanRoutes(app, ctx);
   registerProjectRoutes(app, ctx);
+  registerAdvancedMetricRoutes(app, ctx);
+  registerImportRoutes(app, ctx);
   registerReportRoutes(app, ctx);
   registerPracticeChecklistRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx);
@@ -231,16 +234,6 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
       });
     },
   );
-
-  app.get("/api/import", auth, practiceGate, (_req, res) => {
-    const stub = importNotImplemented();
-    res.status(stub.status).json(stub.body);
-  });
-
-  app.post("/api/import", auth, practiceGate, (_req, res) => {
-    const stub = importNotImplemented();
-    res.status(stub.status).json(stub.body);
-  });
 
   app.use("/api", (_req: Request, res: Response) => {
     res.status(404).json({ error: "not_found" });

@@ -4,7 +4,7 @@ Multi-tenant practice KPI software for chiropractic clinics. This tree is a **gr
 
 **Path B:** treat patient identity, contact, clinical notes, and joinable operational rows as **ePHI from day one**.
 
-Week 12 adds Projects (kanban boards, templates vs active, encrypted task notes) on top of Week 11 Care Plan Generator, Week 10 Practice Checklists + Patient Onboarding, Week 9 Services/Reports, Week 8 Patients, Week 7 Goals, and Week 6 Daily Log + Dashboard KPIs. Stripe checkout/portal/webhooks are unchanged. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
+Week 13 completes **core product parity**: Advanced Metrics (GET / SELL / KEEP & EARN) and generic CSV/Excel import, on top of Week 12 Projects, Week 11 Care Plan Generator, Week 10 Practice Checklists + Patient Onboarding, Week 9 Services/Reports, Week 8 Patients, Week 7 Goals, and Week 6 Daily Log + Dashboard KPIs. Stripe checkout/portal/webhooks are unchanged. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
 
 ---
 
@@ -19,21 +19,25 @@ Week 12 adds Projects (kanban boards, templates vs active, encrypted task notes)
 | Password reset + practice invites (email stub) | Live Resend (adapter documented) |
 | Stripe test-mode org subscriptions (no PHI) | Live Stripe keys / patient data in Stripe |
 | Patient directory + conversion funnel, isolated by practice | S3 |
-| Daily Log + Dashboard KPIs (visits, revenue, OVA, new patients, conversion) | |
-| Goals (revenue / visits / custom) with pace status | New-patient and conversion goal types |
-| Services / treatments catalog (price book) | Advanced Metrics |
-| Reports preview + tenant-scoped PDF export | Emailed reports, CSV import parsers |
-| Practice Checklists (clinic daily/weekly ops) | Mixing “New Template” onto the Checklists nav |
-| Patient Onboarding (templates + per-patient progress) | |
-| Care Plan Generator (compliance gate, catalog subtotals, PDF) | GHL / CRM webhook into project tasks |
+| Daily Log + Dashboard KPIs (visits, revenue, OVA, new patients, conversion) | New-patient and conversion goal types |
+| Goals (revenue / visits / custom) with pace status | Emailed reports |
+| Services / treatments catalog (price book) | Mixing “New Template” onto the Checklists nav |
+| Reports preview + tenant-scoped PDF export | GHL / CRM webhook into project tasks |
+| Practice Checklists (clinic daily/weekly ops) | Hardcoded demo secrets |
+| Patient Onboarding (templates + per-patient progress) | Any deploy to Replit or production |
+| Care Plan Generator (compliance gate, catalog subtotals, PDF) | GitHub holding production PHI |
 | Projects (active boards vs templates, encrypted task notes) | |
-| App-layer AES-256-GCM on patient email/phone/DOB/notes, daily-log notes, onboarding notes, care-plan names/notes, project task notes | Hardcoded demo secrets |
-| CSV/Excel import **placeholder only** | Any deploy to Replit or production |
-| Local Docker Postgres + backup script skeleton | GitHub holding production PHI |
+| Advanced Metrics (GET / SELL / KEEP & EARN; local AI prompt, no OpenAI) | |
+| Generic CSV/Excel import (manual column map, dry-run, 30-day raw-row TTL) | |
+| App-layer AES-256-GCM on patient email/phone/DOB/notes, daily-log notes, onboarding notes, care-plan names/notes, project task notes, import raw rows | |
+| Local Docker Postgres + backup script skeleton | |
 | Helmet, production fail-fast secrets, CI workflow | |
+
+**Core product parity (planned feature list) is complete.** Stripe/BAA remain deferred hooks (test-mode checkout exists; live keys and a countersigned BAA are not).
 
 Read next:
 
+- [docs/WEEK13-METRICS-IMPORT.md](docs/WEEK13-METRICS-IMPORT.md) — Advanced Metrics formulas, generic CSV/Excel import, raw-row TTL
 - [docs/WEEK12-PROJECTS.md](docs/WEEK12-PROJECTS.md) — Projects boards, template vs active, completion %, GHL stub
 - [docs/WEEK11-CARE-PLANS.md](docs/WEEK11-CARE-PLANS.md) — Care Plan Generator, compliance gate, subtotal math, PDF
 - [docs/WEEK10-CHECKLISTS-ONBOARDING.md](docs/WEEK10-CHECKLISTS-ONBOARDING.md) — Practice Checklists vs Patient Onboarding (keep them separate)
@@ -78,13 +82,13 @@ npm run dev
 
 `npm run dev` auto-loads `.env` via `dotenv` (development only). Values already set in the environment are **not** overridden, so you do not need `source .env`. Production does not read a `.env` file.
 
-Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows KPI cards (from the Daily Log plus new-patient/conversion once patients exist), goal pace, onboarding incomplete count, plan, and subscription status. **Daily Log**, **Goals**, **Patients**, **Checklists**, **Onboarding**, **Services**, **Care Plans**, **Projects**, and **Reports** are in the nav. Checklists is clinic ops; Onboarding is patient templates and progress. Care Plans stay locked until the practitioner acknowledges the compliance notice (Close returns to the dashboard without unlocking). Projects keep templates in a separate section from active boards.
+Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows KPI cards (from the Daily Log plus new-patient/conversion once patients exist), goal pace, onboarding incomplete count, plan, and subscription status. **Daily Log**, **Goals**, **Patients**, **Checklists**, **Onboarding**, **Services**, **Care Plans**, **Projects**, **Reports**, and **Advanced Metrics** are in the nav. **Import** is shown for owner/admin. Checklists is clinic ops; Onboarding is patient templates and progress. Care Plans stay locked until the practitioner acknowledges the compliance notice (Close returns to the dashboard without unlocking). Projects keep templates in a separate section from active boards. Advanced Metrics mixes Daily Log / Patients automatic fields with manual GET/SELL/KEEP inputs. Import is generic CSV/Excel with a dry-run preview.
 
 ### Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), daily log, dashboard math, goals, patients/conversion, treatments, reports/PDF, practice checklists, patient onboarding, care plans/PDF, projects, schema tests |
+| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), daily log, dashboard math, goals, patients/conversion, treatments, reports/PDF, practice checklists, patient onboarding, care plans/PDF, projects, advanced metrics, CSV import, schema tests |
 | `npm run check` | TypeScript |
 | `npm run build` | Production client bundle → `dist/public` |
 | `npm run db:push` | Push Drizzle schema to local Postgres |
@@ -98,7 +102,7 @@ Open [http://localhost:5000](http://localhost:5000). Register a user — that cr
 
 PHI helpers refuse to run without both `orgId` and `practiceId`. There is no `"default"` practice.
 
-Automated tests assert **Practice A cannot read Practice B patients**, treatments, care plans, projects, daily-log rows, goals, practice checklists, onboarding templates/patient checklists, or report aggregates, including by UUID and by spoofed `X-Practice-Id`.
+Automated tests assert **Practice A cannot read Practice B patients**, treatments, care plans, projects, advanced metrics, import batches, daily-log rows, goals, practice checklists, onboarding templates/patient checklists, or report aggregates, including by UUID and by spoofed `X-Practice-Id`.
 
 To see the test fail when the filter is removed: delete the `practiceId` predicate in `MemoryStorage.listPatients` and re-run `npm test`. Details in [docs/WEEK2-FOUNDATION.md](docs/WEEK2-FOUNDATION.md).
 
@@ -106,7 +110,7 @@ To see the test fail when the filter is removed: delete the `practiceId` predica
 
 ## Audit retention
 
-`logAudit(...)` is wired into patient CRUD (including conversion and the referral leaderboard), daily log (create/update/delete/list/read), goals CRUD, treatments CRUD, care plans (including compliance ack and PDF export), projects (boards, columns, tasks — no titles or notes in metadata), practice checklists, onboarding templates and patient checklists, dashboard and report reads, report PDF export, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI — no patient names in care-plan, checklist, or project metadata). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
+`logAudit(...)` is wired into patient CRUD (including conversion and the referral leaderboard), daily log (create/update/delete/list/read), goals CRUD, treatments CRUD, care plans (including compliance ack and PDF export), projects (boards, columns, tasks — no titles or notes in metadata), advanced metrics (month and field keys, not values), import batches (counts and mapped field names, not cell values), practice checklists, onboarding templates and patient checklists, dashboard and report reads, report PDF export, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI — no patient names in care-plan, checklist, project, metrics, or import metadata). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled. Import raw rows have a documented 30-day TTL and an unscheduled prune stub.
 
 ---
 
@@ -118,7 +122,7 @@ Never commit `.env`. Never paste production credentials into this repo. There is
 |----------|------|
 | `SESSION_SECRET` | Session cookies (required) |
 | `MFA_ENCRYPTION_KEY` | TOTP secrets at rest |
-| `PHI_ENCRYPTION_KEY` | Patient email, phone, DOB, notes, onboarding checklist notes, care-plan first/last name + notes, and project task notes at rest (AES-256-GCM) |
+| `PHI_ENCRYPTION_KEY` | Patient email, phone, DOB, notes, onboarding checklist notes, care-plan first/last name + notes, project task notes, and import raw/normalized rows at rest (AES-256-GCM) |
 | `FORCE_HTTPS` | Optional HTTP→HTTPS redirect (`true` to enable) |
 | `DATABASE_URL` | Postgres |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret (`sk_test_…`). Never commit live keys. |

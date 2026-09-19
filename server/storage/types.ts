@@ -612,6 +612,121 @@ export type ProjectTaskPatch = Partial<{
   assigneeName: string | null;
 }>;
 
+export type StoredAdvancedMetricInput = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  periodMonth: string;
+  section: string;
+  key: string;
+  valueNumeric: number | null;
+  valueText: string | null;
+  source: string;
+  updatedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AdvancedMetricInputWrite = {
+  periodMonth: string;
+  section: string;
+  key: string;
+  valueNumeric?: number | null;
+  valueText?: string | null;
+  source?: string;
+  updatedBy?: string | null;
+};
+
+export type StoredImportBatch = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  fileName: string;
+  fileType: string;
+  status: string;
+  totalRows: number;
+  successRows: number;
+  errorRows: number;
+  skippedRows: number;
+  columnMapping: Array<{ sourceColumn: string; targetField: string }> | null;
+  headers: string[] | null;
+  importType: string;
+  createdBy: string | null;
+  errorSummary: string | null;
+  committedAt: Date | null;
+  rawExpiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ImportBatchWrite = {
+  fileName: string;
+  fileType: string;
+  status?: string;
+  totalRows?: number;
+  columnMapping?: Array<{ sourceColumn: string; targetField: string }> | null;
+  headers?: string[] | null;
+  importType?: string;
+  createdBy?: string | null;
+  rawExpiresAt: Date;
+};
+
+export type ImportBatchPatch = Partial<{
+  status: string;
+  totalRows: number;
+  successRows: number;
+  errorRows: number;
+  skippedRows: number;
+  columnMapping: Array<{ sourceColumn: string; targetField: string }> | null;
+  headers: string[] | null;
+  importType: string;
+  errorSummary: string | null;
+  committedAt: Date | null;
+}>;
+
+/**
+ * Callers of the storage layer always see plaintext cells.
+ * The `rawData` / `normalizedData` columns hold ciphertext when
+ * PHI_ENCRYPTION_KEY is set.
+ */
+export type StoredImportRow = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  batchId: string;
+  rowNumber: number;
+  rawData: string;
+  normalizedData: string | null;
+  status: string;
+  errorMessage: string | null;
+  targetEntityType: string | null;
+  targetEntityId: string | null;
+  contentHash: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ImportRowWrite = {
+  batchId: string;
+  rowNumber: number;
+  rawData: string;
+  normalizedData?: string | null;
+  status?: string;
+  errorMessage?: string | null;
+  targetEntityType?: string | null;
+  targetEntityId?: string | null;
+  contentHash?: string | null;
+};
+
+export type ImportRowPatch = Partial<{
+  normalizedData: string | null;
+  status: string;
+  errorMessage: string | null;
+  targetEntityType: string | null;
+  targetEntityId: string | null;
+  rawData: string;
+}>;
+
 export type StoredAuditLog = {
   id: string;
   orgId: string;
@@ -1020,6 +1135,49 @@ export interface AppStorage {
   ): Promise<StoredProjectTask | undefined>;
   deleteProjectTask(scope: TenantScope, id: string): Promise<boolean>;
 
+  listAdvancedMetricInputs(
+    scope: TenantScope,
+    periodMonth?: string,
+  ): Promise<StoredAdvancedMetricInput[]>;
+  upsertAdvancedMetricInput(
+    scope: TenantScope,
+    input: AdvancedMetricInputWrite,
+  ): Promise<StoredAdvancedMetricInput>;
+
+  createImportBatch(
+    scope: TenantScope,
+    input: ImportBatchWrite,
+  ): Promise<StoredImportBatch>;
+  getImportBatch(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredImportBatch | undefined>;
+  listImportBatches(scope: TenantScope): Promise<StoredImportBatch[]>;
+  updateImportBatch(
+    scope: TenantScope,
+    id: string,
+    input: ImportBatchPatch,
+  ): Promise<StoredImportBatch | undefined>;
+
+  createImportRow(
+    scope: TenantScope,
+    input: ImportRowWrite,
+  ): Promise<StoredImportRow>;
+  listImportRows(
+    scope: TenantScope,
+    batchId: string,
+  ): Promise<StoredImportRow[]>;
+  updateImportRow(
+    scope: TenantScope,
+    id: string,
+    input: ImportRowPatch,
+  ): Promise<StoredImportRow | undefined>;
+  /**
+   * Clears expired raw/normalized payloads. Keeps batch history.
+   * Not scheduled — call from the prune stub.
+   */
+  pruneExpiredImportRawRows(now: Date): Promise<number>;
+
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
   listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
   countAuditLogs(scope: TenantScope): Promise<number>;
@@ -1081,4 +1239,8 @@ export interface IsolationProbe {
   listCarePlansMissingPracticeFilter(orgId: string): StoredCarePlan[];
   listCarePlanTemplatesMissingPracticeFilter(orgId: string): StoredCarePlanTemplate[];
   listProjectsMissingPracticeFilter(orgId: string): StoredProject[];
+  listAdvancedMetricInputsMissingPracticeFilter(
+    orgId: string,
+  ): StoredAdvancedMetricInput[];
+  listImportBatchesMissingPracticeFilter(orgId: string): StoredImportBatch[];
 }

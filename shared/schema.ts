@@ -11,6 +11,7 @@ import {
   integer,
   date,
   boolean,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -23,7 +24,8 @@ import {
  *   organizations (legal entity / BAA counterparty)
  *     └── practices (clinic / location)
  *           └── PHI / tenant rows (patients, intakes, referral_sources,
- *               daily_stats, goals, treatments, projects, audit_logs)
+ *               daily_stats, goals, treatments, projects,
+ *               advanced_metrics_inputs, import_batches, import_rows, audit_logs)
  *
  * Memberships carry RBAC: owner | admin | clinician | staff | readonly
  */
@@ -941,6 +943,140 @@ export const projectTasks = pgTable(
 );
 
 /**
+ * Advanced Metrics manual inputs (Week 13). GET / SELL / KEEP & EARN.
+ *
+ * Automatic fields (close rate, case average, RPV, PVA, …) are computed from
+ * daily_stats / patients at read time and are not stored here.
+ *
+ * Unique (practice_id, period_month, section, key). period_month is the first
+ * calendar day of the month (YYYY-MM-01). org_id + practice_id required; no
+ * `"default"`. Values are practice-level aggregates — do not log raw numbers
+ * that could identify a patient.
+ */
+export const advancedMetricsInputs = pgTable(
+  "advanced_metrics_inputs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    // First of month (YYYY-MM-01).
+    periodMonth: date("period_month").notNull(),
+    // get | sell | keep
+    section: text("section").notNull(),
+    key: text("key").notNull(),
+    valueNumeric: doublePrecision("value_numeric"),
+    valueText: text("value_text"),
+    // manual | automatic (stored rows are manual; automatic is computed)
+    source: text("source").notNull().default("manual"),
+    updatedBy: varchar("updated_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("advanced_metrics_inputs_org_practice_idx").on(
+      table.orgId,
+      table.practiceId,
+    ),
+    uniqueIndex("advanced_metrics_inputs_practice_period_section_key_unique").on(
+      table.practiceId,
+      table.periodMonth,
+      table.section,
+      table.key,
+    ),
+  ],
+);
+
+/**
+ * Generic CSV / Excel import batches (Week 13).
+ *
+ * No ChiroTouch / SimplePractice parsers. No OpenAI mapping.
+ * fileName may contain clinic identifiers — treat as possible PHI.
+ * org_id + practice_id required; no `"default"`.
+ *
+ * status: uploaded | mapped | previewed | committed | failed
+ */
+export const importBatches = pgTable(
+  "import_batches",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    fileName: text("file_name").notNull(),
+    fileType: text("file_type").notNull(),
+    status: text("status").notNull().default("uploaded"),
+    totalRows: integer("total_rows").notNull().default(0),
+    successRows: integer("success_rows").notNull().default(0),
+    errorRows: integer("error_rows").notNull().default(0),
+    skippedRows: integer("skipped_rows").notNull().default(0),
+    columnMapping: jsonb("column_mapping").$type<
+      Array<{ sourceColumn: string; targetField: string }>
+    >(),
+    headers: jsonb("headers").$type<string[]>(),
+    // daily_log | patients | mixed
+    importType: text("import_type").notNull().default("daily_log"),
+    createdBy: varchar("created_by"),
+    errorSummary: text("error_summary"),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    rawExpiresAt: timestamp("raw_expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("import_batches_org_practice_idx").on(table.orgId, table.practiceId),
+    index("import_batches_practice_created_idx").on(
+      table.practiceId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/**
+ * Imported spreadsheet rows. raw_data / normalized_data are ePHI.
+ *
+ * Encrypted at rest (PHI_ENCRYPTION_KEY, AES-256-GCM) as a JSON envelope of
+ * cell values. Raw rows expire after IMPORT_RAW_TTL_DAYS (see prune stub).
+ * org_id + practice_id required; no `"default"`.
+ */
+export const importRows = pgTable(
+  "import_rows",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    batchId: varchar("batch_id")
+      .notNull()
+      .references(() => importBatches.id, { onDelete: "cascade" }),
+    rowNumber: integer("row_number").notNull(),
+    // Ciphertext JSON array of cells when PHI_ENCRYPTION_KEY is set.
+    rawData: text("raw_data").notNull(),
+    normalizedData: text("normalized_data"),
+    status: text("status").notNull().default("pending"),
+    errorMessage: text("error_message"),
+    targetEntityType: text("target_entity_type"),
+    targetEntityId: varchar("target_entity_id"),
+    contentHash: text("content_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("import_rows_org_practice_idx").on(table.orgId, table.practiceId),
+    index("import_rows_batch_idx").on(table.batchId),
+  ],
+);
+
+/**
  * Append-only audit log. Retention intent: 6 years (HIPAA §164.530(j)).
  * Automated prune is NOT enabled in Week 2.
  */
@@ -1006,6 +1142,12 @@ export type ProjectColumn = typeof projectColumns.$inferSelect;
 export type NewProjectColumn = typeof projectColumns.$inferInsert;
 export type ProjectTask = typeof projectTasks.$inferSelect;
 export type NewProjectTask = typeof projectTasks.$inferInsert;
+export type AdvancedMetricsInput = typeof advancedMetricsInputs.$inferSelect;
+export type NewAdvancedMetricsInput = typeof advancedMetricsInputs.$inferInsert;
+export type ImportBatch = typeof importBatches.$inferSelect;
+export type NewImportBatch = typeof importBatches.$inferInsert;
+export type ImportRow = typeof importRows.$inferSelect;
+export type NewImportRow = typeof importRows.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

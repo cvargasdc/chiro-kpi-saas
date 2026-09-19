@@ -582,6 +582,110 @@ describe("Practice A cannot read Practice B projects", () => {
   });
 });
 
+describe("Practice A cannot read Practice B advanced metrics", () => {
+  it("listAdvancedMetricInputs stays practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+
+    await store.upsertAdvancedMetricInput(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      {
+        periodMonth: "2026-09-01",
+        section: "get",
+        key: "monthly_leads",
+        valueNumeric: 10,
+      },
+    );
+    await store.upsertAdvancedMetricInput(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      {
+        periodMonth: "2026-09-01",
+        section: "get",
+        key: "monthly_leads",
+        valueNumeric: 99,
+      },
+    );
+    await store.upsertAdvancedMetricInput(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      {
+        periodMonth: "2026-09-01",
+        section: "get",
+        key: "monthly_leads",
+        valueNumeric: 3,
+      },
+    );
+
+    const listA = await store.listAdvancedMetricInputs(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      "2026-09-01",
+    );
+    expect(listA).toHaveLength(1);
+    expect(listA[0].valueNumeric).toBe(10);
+
+    const unscoped = store.listAdvancedMetricInputsMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listAdvancedMetricInputs({ orgId: orgA.id } as {
+        orgId: string;
+        practiceId: string;
+      }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});
+
+describe("Practice A cannot read Practice B import batches", () => {
+  it("listImportBatches stays practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+    const expires = new Date("2026-10-16T00:00:00.000Z");
+
+    await store.createImportBatch(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      { fileName: "a.csv", fileType: "csv", rawExpiresAt: expires },
+    );
+    await store.createImportBatch(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      { fileName: "b.csv", fileType: "csv", rawExpiresAt: expires },
+    );
+    await store.createImportBatch(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      { fileName: "a2.csv", fileType: "csv", rawExpiresAt: expires },
+    );
+
+    const listA = await store.listImportBatches({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listA).toHaveLength(1);
+    expect(listA[0].fileName).toBe("a.csv");
+
+    const unscoped = store.listImportBatchesMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listImportBatches({ orgId: orgA.id } as {
+        orgId: string;
+        practiceId: string;
+      }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});
+
 describe("Practice A cannot read Practice B referral sources", () => {
   it("listReferralSources stays practice-scoped", async () => {
     const store = createMemoryStorage();

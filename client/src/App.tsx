@@ -14,6 +14,8 @@ import PracticeChecklistsPage from "./pages/PracticeChecklists";
 import OnboardingPage from "./pages/Onboarding";
 import ProjectsPage from "./pages/Projects";
 import ProjectDetailPage from "./pages/ProjectDetail";
+import AdvancedMetricsPage from "./pages/AdvancedMetrics";
+import ImportPage from "./pages/Import";
 import ForgotPasswordPage from "./pages/ForgotPassword";
 import ResetPasswordPage from "./pages/ResetPassword";
 import MfaVerifyPage from "./pages/MfaVerify";
@@ -154,6 +156,20 @@ export default function App() {
       <Route path="/reports">
         {me ? (
           <ReportsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/advanced-metrics">
+        {me ? (
+          <AdvancedMetricsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/import">
+        {me ? (
+          <ImportPage me={me} onLogout={() => setMe(null)} />
         ) : (
           <Redirect to="/login" />
         )}

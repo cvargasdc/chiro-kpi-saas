@@ -4,6 +4,7 @@ import type {
   StoredCarePlan,
   StoredDailyStat,
   StoredGoal,
+  StoredImportRow,
   StoredPatient,
   StoredPatientChecklist,
   StoredPatientChecklistTask,
@@ -166,5 +167,16 @@ export function decryptStoredProjectTask(
   return {
     ...row,
     notes: decryptPhiString(row.notes, key),
+  };
+}
+
+export function decryptStoredImportRow(
+  row: StoredImportRow,
+  key: string,
+): StoredImportRow {
+  return {
+    ...row,
+    rawData: decryptPhiString(row.rawData, key) ?? "",
+    normalizedData: decryptPhiString(row.normalizedData, key),
   };
 }

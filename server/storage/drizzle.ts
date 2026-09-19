@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, gt, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, gt, isNull, lte, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 import type { MembershipRole } from "@shared/roles";
@@ -15,12 +15,14 @@ import {
   decryptStoredCarePlan,
   decryptStoredDailyStat,
   decryptStoredGoal,
+  decryptStoredImportRow,
   decryptStoredPatient,
   decryptStoredPatientChecklist,
   decryptStoredPatientChecklistTask,
   decryptStoredProjectTask,
   encryptCarePlanSensitiveFields,
   encryptPhiString,
+  encryptPhiStringIfKeyed,
 } from "../crypto/fields";
 import { DuplicateDailyLogError } from "../daily-log/errors";
 import { requireOrgId, requireTenantScope, type TenantScope } from "../tenant/scope";
@@ -89,6 +91,14 @@ import type {
   StoredProjectTask,
   ProjectTaskWrite,
   ProjectTaskPatch,
+  StoredAdvancedMetricInput,
+  AdvancedMetricInputWrite,
+  StoredImportBatch,
+  ImportBatchWrite,
+  ImportBatchPatch,
+  StoredImportRow,
+  ImportRowWrite,
+  ImportRowPatch,
 } from "./types";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -478,6 +488,70 @@ function mapProjectColumnRow(row: schema.ProjectColumn): StoredProjectColumn {
     projectId: row.projectId,
     name: row.name,
     sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapAdvancedMetricInputRow(
+  row: schema.AdvancedMetricsInput,
+): StoredAdvancedMetricInput {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    periodMonth: row.periodMonth,
+    section: row.section,
+    key: row.key,
+    valueNumeric: row.valueNumeric ?? null,
+    valueText: row.valueText ?? null,
+    source: row.source,
+    updatedBy: row.updatedBy ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapImportBatchRow(row: schema.ImportBatch): StoredImportBatch {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    fileName: row.fileName,
+    fileType: row.fileType,
+    status: row.status,
+    totalRows: row.totalRows,
+    successRows: row.successRows,
+    errorRows: row.errorRows,
+    skippedRows: row.skippedRows,
+    columnMapping: Array.isArray(row.columnMapping)
+      ? [...row.columnMapping]
+      : null,
+    headers: Array.isArray(row.headers) ? [...row.headers] : null,
+    importType: row.importType,
+    createdBy: row.createdBy ?? null,
+    errorSummary: row.errorSummary ?? null,
+    committedAt: row.committedAt ?? null,
+    rawExpiresAt: row.rawExpiresAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapImportRow(row: schema.ImportRow): StoredImportRow {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    batchId: row.batchId,
+    rowNumber: row.rowNumber,
+    rawData: row.rawData,
+    normalizedData: row.normalizedData ?? null,
+    status: row.status,
+    errorMessage: row.errorMessage ?? null,
+    targetEntityType: row.targetEntityType ?? null,
+    targetEntityId: row.targetEntityId ?? null,
+    contentHash: row.contentHash ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -3030,6 +3104,302 @@ export class DrizzleStorage implements AppStorage {
       )
       .returning({ id: schema.projectTasks.id });
     return deleted.length > 0;
+  }
+
+  async listAdvancedMetricInputs(
+    scope: TenantScope,
+    periodMonth?: string,
+  ): Promise<StoredAdvancedMetricInput[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.advancedMetricsInputs.orgId, orgId),
+      eq(schema.advancedMetricsInputs.practiceId, practiceId),
+    ];
+    if (periodMonth) {
+      filters.push(eq(schema.advancedMetricsInputs.periodMonth, periodMonth));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.advancedMetricsInputs)
+      .where(and(...filters));
+    return rows.map(mapAdvancedMetricInputRow);
+  }
+
+  async upsertAdvancedMetricInput(
+    scope: TenantScope,
+    input: AdvancedMetricInputWrite,
+  ): Promise<StoredAdvancedMetricInput> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [existing] = await this.db
+      .select()
+      .from(schema.advancedMetricsInputs)
+      .where(
+        and(
+          eq(schema.advancedMetricsInputs.orgId, orgId),
+          eq(schema.advancedMetricsInputs.practiceId, practiceId),
+          eq(schema.advancedMetricsInputs.periodMonth, input.periodMonth),
+          eq(schema.advancedMetricsInputs.section, input.section),
+          eq(schema.advancedMetricsInputs.key, input.key),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      const [row] = await this.db
+        .update(schema.advancedMetricsInputs)
+        .set({
+          valueNumeric:
+            input.valueNumeric === undefined
+              ? existing.valueNumeric
+              : input.valueNumeric,
+          valueText:
+            input.valueText === undefined ? existing.valueText : input.valueText,
+          source: input.source ?? existing.source,
+          updatedBy:
+            input.updatedBy === undefined ? existing.updatedBy : input.updatedBy,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.advancedMetricsInputs.id, existing.id))
+        .returning();
+      return mapAdvancedMetricInputRow(row);
+    }
+    const [row] = await this.db
+      .insert(schema.advancedMetricsInputs)
+      .values({
+        orgId,
+        practiceId,
+        periodMonth: input.periodMonth,
+        section: input.section,
+        key: input.key,
+        valueNumeric: input.valueNumeric ?? null,
+        valueText: input.valueText ?? null,
+        source: input.source ?? "manual",
+        updatedBy: input.updatedBy ?? null,
+      })
+      .returning();
+    return mapAdvancedMetricInputRow(row);
+  }
+
+  async createImportBatch(
+    scope: TenantScope,
+    input: ImportBatchWrite,
+  ): Promise<StoredImportBatch> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.importBatches)
+      .values({
+        orgId,
+        practiceId,
+        fileName: input.fileName,
+        fileType: input.fileType,
+        status: input.status ?? "uploaded",
+        totalRows: input.totalRows ?? 0,
+        columnMapping: input.columnMapping ?? null,
+        headers: input.headers ?? null,
+        importType: input.importType ?? "daily_log",
+        createdBy: input.createdBy ?? null,
+        rawExpiresAt: input.rawExpiresAt,
+      })
+      .returning();
+    return mapImportBatchRow(row);
+  }
+
+  async getImportBatch(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredImportBatch | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.importBatches)
+      .where(
+        and(
+          eq(schema.importBatches.id, id),
+          eq(schema.importBatches.orgId, orgId),
+          eq(schema.importBatches.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapImportBatchRow(row) : undefined;
+  }
+
+  async listImportBatches(scope: TenantScope): Promise<StoredImportBatch[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.importBatches)
+      .where(
+        and(
+          eq(schema.importBatches.orgId, orgId),
+          eq(schema.importBatches.practiceId, practiceId),
+        ),
+      )
+      .orderBy(desc(schema.importBatches.createdAt));
+    return rows.map(mapImportBatchRow);
+  }
+
+  async updateImportBatch(
+    scope: TenantScope,
+    id: string,
+    input: ImportBatchPatch,
+  ): Promise<StoredImportBatch | undefined> {
+    const existing = await this.getImportBatch(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.importBatches)
+      .set({
+        status: input.status ?? existing.status,
+        totalRows: input.totalRows ?? existing.totalRows,
+        successRows: input.successRows ?? existing.successRows,
+        errorRows: input.errorRows ?? existing.errorRows,
+        skippedRows: input.skippedRows ?? existing.skippedRows,
+        columnMapping:
+          input.columnMapping === undefined
+            ? existing.columnMapping
+            : input.columnMapping,
+        headers: input.headers === undefined ? existing.headers : input.headers,
+        importType: input.importType ?? existing.importType,
+        errorSummary:
+          input.errorSummary === undefined
+            ? existing.errorSummary
+            : input.errorSummary,
+        committedAt:
+          input.committedAt === undefined
+            ? existing.committedAt
+            : input.committedAt,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.importBatches.id, id),
+          eq(schema.importBatches.orgId, orgId),
+          eq(schema.importBatches.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapImportBatchRow(row) : undefined;
+  }
+
+  async createImportRow(
+    scope: TenantScope,
+    input: ImportRowWrite,
+  ): Promise<StoredImportRow> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.importRows)
+      .values({
+        orgId,
+        practiceId,
+        batchId: input.batchId,
+        rowNumber: input.rowNumber,
+        rawData:
+          encryptPhiStringIfKeyed(input.rawData, this.phiEncryptionKey) ?? "",
+        normalizedData: encryptPhiStringIfKeyed(
+          input.normalizedData ?? null,
+          this.phiEncryptionKey,
+        ),
+        status: input.status ?? "pending",
+        errorMessage: input.errorMessage ?? null,
+        targetEntityType: input.targetEntityType ?? null,
+        targetEntityId: input.targetEntityId ?? null,
+        contentHash: input.contentHash ?? null,
+      })
+      .returning();
+    return decryptStoredImportRow(mapImportRow(row), this.phiEncryptionKey);
+  }
+
+  async listImportRows(
+    scope: TenantScope,
+    batchId: string,
+  ): Promise<StoredImportRow[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.importRows)
+      .where(
+        and(
+          eq(schema.importRows.orgId, orgId),
+          eq(schema.importRows.practiceId, practiceId),
+          eq(schema.importRows.batchId, batchId),
+        ),
+      )
+      .orderBy(asc(schema.importRows.rowNumber));
+    return rows.map((row) =>
+      decryptStoredImportRow(mapImportRow(row), this.phiEncryptionKey),
+    );
+  }
+
+  async updateImportRow(
+    scope: TenantScope,
+    id: string,
+    input: ImportRowPatch,
+  ): Promise<StoredImportRow | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [existing] = await this.db
+      .select()
+      .from(schema.importRows)
+      .where(
+        and(
+          eq(schema.importRows.id, id),
+          eq(schema.importRows.orgId, orgId),
+          eq(schema.importRows.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    if (!existing) return undefined;
+    const [row] = await this.db
+      .update(schema.importRows)
+      .set({
+        normalizedData:
+          input.normalizedData === undefined
+            ? existing.normalizedData
+            : encryptPhiStringIfKeyed(input.normalizedData, this.phiEncryptionKey),
+        status: input.status ?? existing.status,
+        errorMessage:
+          input.errorMessage === undefined
+            ? existing.errorMessage
+            : input.errorMessage,
+        targetEntityType:
+          input.targetEntityType === undefined
+            ? existing.targetEntityType
+            : input.targetEntityType,
+        targetEntityId:
+          input.targetEntityId === undefined
+            ? existing.targetEntityId
+            : input.targetEntityId,
+        rawData:
+          input.rawData === undefined
+            ? existing.rawData
+            : encryptPhiStringIfKeyed(input.rawData, this.phiEncryptionKey) ?? "",
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.importRows.id, existing.id))
+      .returning();
+    return row
+      ? decryptStoredImportRow(mapImportRow(row), this.phiEncryptionKey)
+      : undefined;
+  }
+
+  async pruneExpiredImportRawRows(nowDate: Date): Promise<number> {
+    const expired = await this.db
+      .select({ id: schema.importBatches.id })
+      .from(schema.importBatches)
+      .where(lte(schema.importBatches.rawExpiresAt, nowDate));
+    if (expired.length === 0) return 0;
+    let cleared = 0;
+    for (const batch of expired) {
+      const updated = await this.db
+        .update(schema.importRows)
+        .set({
+          rawData: "",
+          normalizedData: null,
+          updatedAt: nowDate,
+        })
+        .where(eq(schema.importRows.batchId, batch.id))
+        .returning({ id: schema.importRows.id });
+      cleared += updated.length;
+    }
+    return cleared;
   }
 
   async createAuditLog(input: NewAuditLog): Promise<StoredAuditLog> {
