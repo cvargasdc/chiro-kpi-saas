@@ -275,3 +275,46 @@ describe("Practice A cannot read Practice B goals", () => {
     ).rejects.toBeInstanceOf(TenantScopeError);
   });
 });
+
+describe("Practice A cannot read Practice B referral sources", () => {
+  it("listReferralSources stays practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+
+    await store.ensureReferralSource(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      "Google",
+    );
+    await store.ensureReferralSource(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      "Facebook",
+    );
+    await store.ensureReferralSource(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      "Walk-in",
+    );
+
+    const listA = await store.listReferralSources({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listA.map((r) => r.name)).toEqual(["Google"]);
+
+    const unscoped = store.listReferralSourcesMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listReferralSources({ orgId: orgA.id } as {
+        orgId: string;
+        practiceId: string;
+      }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});

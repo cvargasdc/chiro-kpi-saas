@@ -32,7 +32,6 @@ function formatChange(value: number | null): string {
 
 export default function DashboardPage({ me, onLogout }: Props) {
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("staff");
@@ -45,7 +44,6 @@ export default function DashboardPage({ me, onLogout }: Props) {
   const [period, setPeriod] = useState<PeriodKey>("this_week");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const canWrite = me.active?.role && me.active.role !== "readonly";
   const canInvite = me.active?.role === "owner" || me.active?.role === "admin";
   const canManageBilling = canInvite;
 
@@ -93,21 +91,6 @@ export default function DashboardPage({ me, onLogout }: Props) {
       .then(setGoals)
       .catch(() => setGoals(null));
   }, []);
-
-  async function addPatient(e: FormEvent) {
-    e.preventDefault();
-    setError("");
-    try {
-      await api("/api/patients", {
-        method: "POST",
-        body: JSON.stringify({ name }),
-      });
-      setName("");
-      await loadPatients();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create patient");
-    }
-  }
 
   return (
     <AppShell me={me} onLogout={onLogout}>
@@ -196,7 +179,7 @@ export default function DashboardPage({ me, onLogout }: Props) {
               period have revenue with zero visits.
             </div>
           ) : null}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <KpiCard
               label="Patient visits"
               value={kpis ? String(kpis.kpis.visits.value) : "—"}
@@ -219,9 +202,46 @@ export default function DashboardPage({ me, onLogout }: Props) {
               }
             />
             <KpiCard
-              label="New patients / conversion"
-              value="Not available"
-              change={kpis?.kpis.newPatients.reason ?? "Conversion fields are not in this release."}
+              label="New patients"
+              value={
+                kpis
+                  ? kpis.kpis.newPatients.available
+                    ? String(kpis.kpis.newPatients.value)
+                    : "Not available"
+                  : "—"
+              }
+              change={
+                kpis
+                  ? kpis.kpis.newPatients.available
+                    ? `${formatChange(kpis.kpis.newPatients.percentChange)}${
+                        kpis.kpis.wellnessPatients.available
+                          ? ` · ${kpis.kpis.wellnessPatients.value} wellness`
+                          : ""
+                      }`
+                    : kpis.kpis.newPatients.reason
+                  : ""
+              }
+            />
+            <KpiCard
+              label="New conversion"
+              value={
+                kpis
+                  ? kpis.kpis.conversion.available
+                    ? kpis.kpis.conversion.value == null
+                      ? "—"
+                      : `${kpis.kpis.conversion.value}%`
+                    : "Not available"
+                  : "—"
+              }
+              change={
+                kpis
+                  ? kpis.kpis.conversion.available
+                    ? kpis.kpis.conversion.newCount === 0
+                      ? "No new patients in this period"
+                      : `${kpis.kpis.conversion.convertedCount} of ${kpis.kpis.conversion.newCount} new · ${formatChange(kpis.kpis.conversion.percentChange)}`
+                    : kpis.kpis.conversion.reason
+                  : ""
+              }
             />
           </div>
         </section>
@@ -237,39 +257,31 @@ export default function DashboardPage({ me, onLogout }: Props) {
 
         <section className="bg-white shadow-card rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Patients (stub)</h2>
-            <span className="text-xs rounded-full bg-clinical-100 text-clinical-700 px-2 py-1">
-              Path B · ePHI
-            </span>
+            <h2 className="font-semibold">Patients</h2>
+            <Link href="/patients" className="text-sm text-accent-600 font-medium">
+              View patients
+            </Link>
           </div>
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
-          {canWrite ? (
-            <form onSubmit={addPatient} className="flex gap-2">
-              <input
-                className="flex-1 rounded-lg border border-slate-200 px-3 py-2"
-                placeholder="Patient name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-accent-500 text-white px-4 py-2 font-medium hover:bg-accent-600"
-              >
-                Add
-              </button>
-            </form>
-          ) : (
-            <p className="text-sm text-ink-500">Read-only role — patient records cannot be changed.</p>
-          )}
           {patients.length === 0 ? (
-            <p className="text-sm text-ink-500">No patients in this practice yet.</p>
+            <p className="text-sm text-ink-500">
+              No patients in this practice yet.{" "}
+              <Link href="/patients" className="text-accent-600 font-medium">
+                Add a patient
+              </Link>{" "}
+              to unlock new-patient and conversion KPIs.
+            </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {patients.map((p) => (
-                <li key={p.id} className="py-2 flex justify-between text-sm">
-                  <span className="font-medium">{p.name}</span>
-                  <span className="text-ink-500">{p.status}</span>
+              {patients.slice(0, 8).map((p) => (
+                <li key={p.id} className="py-2 flex justify-between gap-3 text-sm">
+                  <Link href={`/patients/${p.id}`} className="font-medium text-accent-600">
+                    {p.name}
+                  </Link>
+                  <span className="text-ink-500 capitalize">
+                    {p.patientType}
+                    {p.converted ? " · converted" : ""}
+                  </span>
                 </li>
               ))}
             </ul>

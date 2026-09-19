@@ -55,8 +55,58 @@ export type Patient = {
   name: string;
   email: string | null;
   phone: string | null;
+  dateOfBirth: string | null;
   condition: string | null;
   status: string;
+  patientType: "new" | "wellness" | string;
+  typeName: string | null;
+  referralSourceId: string | null;
+  referralSource: string | null;
+  day1Date: string | null;
+  day2Date: string | null;
+  careStatus: string;
+  converted: boolean;
+  conversionDate: string | null;
+  planType: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  onboarding: { available: false; reason: string };
+};
+
+export type PatientsListResponse = {
+  patients: Patient[];
+  page: { limit: number; offset: number; total: number };
+  filters: {
+    q: string | null;
+    type: string;
+    month: string | null;
+    referralSource: string | null;
+  };
+  emptyState: "no_patients" | "no_matches" | "has_data";
+};
+
+export type ReferralLeaderboardRow = {
+  referralSource: string;
+  newCount: number;
+  convertedCount: number;
+  wellnessCount: number;
+  conversionPercent: number | null;
+};
+
+export type ReferralLeaderboardResponse = {
+  today: string;
+  from: string;
+  to: string;
+  formula: string;
+  emptyState: "no_entries" | "has_data";
+  rows: ReferralLeaderboardRow[];
+};
+
+export type ReferralSource = {
+  id: string;
+  name: string;
+  active: boolean;
 };
 
 export type BillingStatus = {
@@ -107,6 +157,30 @@ export type UnavailableKpi = {
   reason: string;
 };
 
+export type CountKpi = {
+  available: true;
+  value: number;
+  previousValue: number;
+  percentChange: number | null;
+  emptyState: string;
+  unit: "count";
+  formula: string;
+};
+
+export type ConversionKpi = {
+  available: true;
+  value: number | null;
+  previousValue: number | null;
+  percentChange: number | null;
+  convertedCount: number;
+  newCount: number;
+  previousConvertedCount: number;
+  previousNewCount: number;
+  emptyState: string;
+  unit: "percent";
+  formula: string;
+};
+
 export type DashboardResponse = {
   today: string;
   period: {
@@ -145,8 +219,9 @@ export type DashboardResponse = {
       explanation: string;
       unit: string;
     };
-    newPatients: UnavailableKpi;
-    conversion: UnavailableKpi;
+    newPatients: UnavailableKpi | CountKpi;
+    wellnessPatients: UnavailableKpi | CountKpi;
+    conversion: UnavailableKpi | ConversionKpi;
   };
   anomalies: {
     revenueWithoutVisits: Array<{

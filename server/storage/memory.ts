@@ -29,6 +29,7 @@ import type {
   StoredPatient,
   StoredPractice,
   StoredPracticeMembership,
+  StoredReferralSource,
   StoredUser,
   UserPatch,
 } from "./types";
@@ -44,8 +45,9 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   practices = new Map<string, StoredPractice>();
   orgMemberships: StoredOrgMembership[] = [];
   practiceMemberships: StoredPracticeMembership[] = [];
-  /** Serialized rows — email/phone/DOB are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  /** Serialized rows — email/phone/DOB/notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   patients: StoredPatient[] = [];
+  referralSources: StoredReferralSource[] = [];
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   dailyStats: StoredDailyStat[] = [];
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
@@ -363,6 +365,18 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
       ),
       condition: input.condition ?? null,
       status: input.status ?? "active",
+      patientType: input.patientType ?? "new",
+      typeName: input.typeName ?? null,
+      referralSourceId: input.referralSourceId ?? null,
+      referralSource: input.referralSource ?? null,
+      day1Date: input.day1Date ?? null,
+      day2Date: input.day2Date ?? null,
+      careStatus: input.careStatus ?? "new",
+      converted: input.converted ?? false,
+      conversionDate: input.conversionDate ?? null,
+      planType: input.planType ?? null,
+      notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+      createdBy: input.createdBy ?? null,
       createdAt: now(),
       updatedAt: now(),
     };
@@ -422,6 +436,26 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     }
     if (input.condition !== undefined) existing.condition = input.condition;
     if (input.status !== undefined) existing.status = input.status;
+    if (input.patientType !== undefined) existing.patientType = input.patientType;
+    if (input.typeName !== undefined) existing.typeName = input.typeName;
+    if (input.referralSourceId !== undefined) {
+      existing.referralSourceId = input.referralSourceId;
+    }
+    if (input.referralSource !== undefined) {
+      existing.referralSource = input.referralSource;
+    }
+    if (input.day1Date !== undefined) existing.day1Date = input.day1Date;
+    if (input.day2Date !== undefined) existing.day2Date = input.day2Date;
+    if (input.careStatus !== undefined) existing.careStatus = input.careStatus;
+    if (input.converted !== undefined) existing.converted = input.converted;
+    if (input.conversionDate !== undefined) {
+      existing.conversionDate = input.conversionDate;
+    }
+    if (input.planType !== undefined) existing.planType = input.planType;
+    if (input.notes !== undefined) {
+      existing.notes = encryptPhiString(input.notes, this.phiEncryptionKey);
+    }
+    if (input.createdBy !== undefined) existing.createdBy = input.createdBy;
     existing.updatedAt = now();
     return decryptStoredPatient(existing, this.phiEncryptionKey);
   }
@@ -434,6 +468,68 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     if (index === -1) return false;
     this.patients.splice(index, 1);
     return true;
+  }
+
+  listReferralSourcesMissingPracticeFilter(orgId: string): StoredReferralSource[] {
+    return this.referralSources.filter((row) => row.orgId === orgId);
+  }
+
+  async listReferralSources(scope: TenantScope): Promise<StoredReferralSource[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.referralSources
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getReferralSource(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredReferralSource | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.referralSources.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+  }
+
+  async createReferralSource(
+    scope: TenantScope,
+    input: { name: string; active?: boolean },
+  ): Promise<StoredReferralSource> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredReferralSource = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      name: input.name,
+      active: input.active ?? true,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.referralSources.push(row);
+    return row;
+  }
+
+  async ensureReferralSource(
+    scope: TenantScope,
+    name: string,
+  ): Promise<StoredReferralSource> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const needle = name.trim().toLowerCase();
+    const existing = this.referralSources.find(
+      (row) =>
+        row.orgId === orgId &&
+        row.practiceId === practiceId &&
+        row.name.toLowerCase() === needle,
+    );
+    if (existing) {
+      if (!existing.active) {
+        existing.active = true;
+        existing.updatedAt = now();
+      }
+      return existing;
+    }
+    return this.createReferralSource(scope, { name: name.trim(), active: true });
   }
 
   async createDailyStat(

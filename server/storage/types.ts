@@ -91,6 +91,18 @@ export type StoredPatient = {
   dateOfBirth: string | null;
   condition: string | null;
   status: string;
+  patientType: string;
+  typeName: string | null;
+  referralSourceId: string | null;
+  referralSource: string | null;
+  day1Date: string | null;
+  day2Date: string | null;
+  careStatus: string;
+  converted: boolean;
+  conversionDate: string | null;
+  planType: string | null;
+  notes: string | null;
+  createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -102,6 +114,28 @@ export type PatientWrite = {
   dateOfBirth?: string | null;
   condition?: string | null;
   status?: string;
+  patientType?: string;
+  typeName?: string | null;
+  referralSourceId?: string | null;
+  referralSource?: string | null;
+  day1Date?: string | null;
+  day2Date?: string | null;
+  careStatus?: string;
+  converted?: boolean;
+  conversionDate?: string | null;
+  planType?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+};
+
+export type StoredReferralSource = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type StoredDailyStat = {
@@ -306,6 +340,20 @@ export interface AppStorage {
   ): Promise<StoredPatient | undefined>;
   deletePatient(scope: TenantScope, id: string): Promise<boolean>;
 
+  ensureReferralSource(
+    scope: TenantScope,
+    name: string,
+  ): Promise<StoredReferralSource>;
+  getReferralSource(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredReferralSource | undefined>;
+  listReferralSources(scope: TenantScope): Promise<StoredReferralSource[]>;
+  createReferralSource(
+    scope: TenantScope,
+    input: { name: string; active?: boolean },
+  ): Promise<StoredReferralSource>;
+
   createDailyStat(
     scope: TenantScope,
     input: DailyStatWrite,
@@ -388,4 +436,5 @@ export interface IsolationProbe {
   listPatientsMissingPracticeFilter(orgId: string): StoredPatient[];
   listDailyStatsMissingPracticeFilter(orgId: string): StoredDailyStat[];
   listGoalsMissingPracticeFilter(orgId: string): StoredGoal[];
+  listReferralSourcesMissingPracticeFilter(orgId: string): StoredReferralSource[];
 }

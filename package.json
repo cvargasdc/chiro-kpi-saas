@@ -1,10 +1,10 @@
 {
   "name": "chiro-kpi-saas",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
-  "description": "Chiro-KPI Path B rebuild — multi-tenant HIPAA-oriented practice KPI SaaS (Week 7 goals + daily log + dashboard)",
+  "description": "Chiro-KPI Path B rebuild — multi-tenant HIPAA-oriented practice KPI SaaS (Week 8 patients + conversion funnel)",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build",

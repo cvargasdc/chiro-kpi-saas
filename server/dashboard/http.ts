@@ -11,6 +11,12 @@ import {
   toYmd,
   type PeriodKey,
 } from "@shared/kpis";
+import {
+  CONVERSION_FORMULA,
+  NEW_PATIENT_FORMULA,
+  WELLNESS_PATIENT_FORMULA,
+  periodFunnel,
+} from "@shared/patients";
 import { PHI_READ_ROLES } from "@shared/roles";
 import { logAudit } from "../audit/logAudit";
 import {
@@ -24,10 +30,10 @@ import type { StoredDailyStat } from "../storage/types";
 
 const PERIOD_KEYS: PeriodKey[] = ["this_week", "this_month", "custom"];
 
-const CONVERSION_UNAVAILABLE = {
+const PATIENT_KPI_UNAVAILABLE = {
   available: false as const,
   reason:
-    "Patient conversion fields are not in this release. New-patient and conversion KPIs will appear when intakes land.",
+    "No patients in this practice yet. New-patient and conversion KPIs appear once the first patient is recorded.",
 };
 
 function sumVisits(rows: StoredDailyStat[]): number {
@@ -36,6 +42,74 @@ function sumVisits(rows: StoredDailyStat[]): number {
 
 function sumRevenueCents(rows: StoredDailyStat[]): number {
   return rows.reduce((sum, row) => sum + row.revenueCents, 0);
+}
+
+function buildPatientKpis(
+  patients: Parameters<typeof periodFunnel>[0],
+  from: string,
+  to: string,
+  previousFrom: string,
+  previousTo: string,
+) {
+  if (patients.length === 0) {
+    return {
+      newPatients: PATIENT_KPI_UNAVAILABLE,
+      wellnessPatients: PATIENT_KPI_UNAVAILABLE,
+      conversion: PATIENT_KPI_UNAVAILABLE,
+    };
+  }
+  const current = periodFunnel(patients, from, to);
+  const previous = periodFunnel(patients, previousFrom, previousTo);
+  return {
+    newPatients: {
+      available: true as const,
+      value: current.newCount,
+      previousValue: previous.newCount,
+      percentChange: roundPercent(
+        percentChange(current.newCount, previous.newCount),
+      ),
+      percentChangeFormula:
+        "((current - previous) / previous) * 100; null when previous is 0 (no baseline)",
+      emptyState: current.emptyState,
+      unit: "count" as const,
+      formula: NEW_PATIENT_FORMULA,
+    },
+    wellnessPatients: {
+      available: true as const,
+      value: current.wellnessCount,
+      previousValue: previous.wellnessCount,
+      percentChange: roundPercent(
+        percentChange(current.wellnessCount, previous.wellnessCount),
+      ),
+      percentChangeFormula:
+        "((current - previous) / previous) * 100; null when previous is 0 (no baseline)",
+      emptyState:
+        current.wellnessCount === 0 && current.newCount === 0
+          ? ("no_entries" as const)
+          : ("has_data" as const),
+      unit: "count" as const,
+      formula: WELLNESS_PATIENT_FORMULA,
+    },
+    conversion: {
+      available: true as const,
+      value: current.conversionPercent,
+      previousValue: previous.conversionPercent,
+      percentChange: roundPercent(
+        current.conversionPercent != null && previous.conversionPercent != null
+          ? percentChange(current.conversionPercent, previous.conversionPercent)
+          : null,
+      ),
+      percentChangeFormula:
+        "((current - previous) / previous) * 100; null when either rate is undefined or previous is 0",
+      convertedCount: current.convertedCount,
+      newCount: current.newCount,
+      previousConvertedCount: previous.convertedCount,
+      previousNewCount: previous.newCount,
+      emptyState: current.emptyState,
+      unit: "percent" as const,
+      formula: CONVERSION_FORMULA,
+    },
+  };
 }
 
 function kpiBlock(opts: {
@@ -90,12 +164,13 @@ export function registerDashboardRoutes(app: Express, ctx: HttpContext): void {
 
       const tenant = req.tenant!;
       const scope = { orgId: tenant.orgId, practiceId: tenant.practiceId };
-      const [current, previous] = await Promise.all([
+      const [current, previous, patients] = await Promise.all([
         storage.listDailyStats(scope, { from: window.from, to: window.to }),
         storage.listDailyStats(scope, {
           from: window.previousFrom,
           to: window.previousTo,
         }),
+        storage.listPatients(scope),
       ]);
 
       const visits = sumVisits(current);
@@ -114,6 +189,14 @@ export function registerDashboardRoutes(app: Express, ctx: HttpContext): void {
           revenue: centsToDollars(row.revenueCents),
           revenueCents: row.revenueCents,
         }));
+
+      const patientKpis = buildPatientKpis(
+        patients,
+        window.from,
+        window.to,
+        window.previousFrom,
+        window.previousTo,
+      );
 
       await logAudit(storage, {
         orgId: tenant.orgId,
@@ -183,8 +266,9 @@ export function registerDashboardRoutes(app: Express, ctx: HttpContext): void {
                 : "OVA = period revenue ÷ period visits (nearest cent).",
             unit: "usd",
           },
-          newPatients: CONVERSION_UNAVAILABLE,
-          conversion: CONVERSION_UNAVAILABLE,
+          newPatients: patientKpis.newPatients,
+          wellnessPatients: patientKpis.wellnessPatients,
+          conversion: patientKpis.conversion,
         },
         anomalies: {
           revenueWithoutVisits: anomalies,

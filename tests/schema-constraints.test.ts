@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   patients,
   patientIntakes,
+  referralSources,
   dailyStats,
   goals,
   auditLogs,
@@ -21,7 +22,14 @@ describe("Path B schema constraints", () => {
   });
 
   it("PHI tables require orgId and practiceId", () => {
-    for (const table of [patients, patientIntakes, dailyStats, goals, auditLogs]) {
+    for (const table of [
+      patients,
+      patientIntakes,
+      referralSources,
+      dailyStats,
+      goals,
+      auditLogs,
+    ]) {
       expect(table.orgId).toBeDefined();
       expect(table.practiceId).toBeDefined();
       expect(table.orgId.notNull).toBe(true);
@@ -68,6 +76,18 @@ describe("Path B schema constraints", () => {
     expect(SCHEMA).not.toMatch(/totalAppointments/);
     expect(dailyStats.visits.notNull).toBe(true);
     expect(dailyStats.revenueCents.notNull).toBe(true);
+  });
+
+  it("unifies conversion funnel fields on patients (encrypted notes)", () => {
+    expect(SCHEMA).toMatch(/patientType:\s*text\("patient_type"\)/);
+    expect(SCHEMA).toMatch(/converted:\s*boolean\("converted"\)/);
+    expect(SCHEMA).toMatch(/careStatus:\s*text\("care_status"\)/);
+    expect(SCHEMA).toMatch(/referral_sources/);
+    expect(patients.orgId.notNull).toBe(true);
+    expect(patients.practiceId.notNull).toBe(true);
+    expect(referralSources.orgId.notNull).toBe(true);
+    expect(referralSources.practiceId.notNull).toBe(true);
+    expect(SCHEMA).toMatch(/Reserved for future onboarding/);
   });
 
   it("stores goals with integer targets, optional manual current, and createdBy", () => {

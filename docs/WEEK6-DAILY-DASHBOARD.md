@@ -112,7 +112,7 @@ percentChange = previous === 0
 
 Rounded to 1 decimal. **`null` when previous is 0** — we do not invent `+100%`. The UI shows “No baseline”. Revenue percent change is computed from **integer cents**.
 
-**New patients / conversion:** `{ available: false, reason }` until intake conversion fields exist. Do not treat a zero as “no new patients”.
+**New patients / conversion:** `{ available: false, reason }` until the practice has at least one patient row. After that, counts use `patients` (see [WEEK8-PATIENTS.md](./WEEK8-PATIENTS.md)). Do not treat “unavailable” as “0 new patients”.
 
 ### Empty states
 

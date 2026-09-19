@@ -62,6 +62,9 @@ export function encryptPatientSensitiveFields(
   if (input.dateOfBirth !== undefined) {
     out.dateOfBirth = encryptPhiString(input.dateOfBirth, key);
   }
+  if (input.notes !== undefined) {
+    out.notes = encryptPhiString(input.notes, key);
+  }
   return out;
 }
 
@@ -71,6 +74,7 @@ export function decryptStoredPatient(row: StoredPatient, key: string): StoredPat
     email: decryptPhiString(row.email, key),
     phone: decryptPhiString(row.phone, key),
     dateOfBirth: decryptPhiString(row.dateOfBirth, key),
+    notes: decryptPhiString(row.notes, key),
   };
 }
 

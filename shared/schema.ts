@@ -22,7 +22,7 @@ import {
  * Tenant model:
  *   organizations (legal entity / BAA counterparty)
  *     └── practices (clinic / location)
- *           └── PHI rows (patients, intakes, daily_stats, goals, audit_logs)
+ *           └── PHI rows (patients, intakes, referral_sources, daily_stats, goals, audit_logs)
  *
  * Memberships carry RBAC: owner | admin | clinician | staff | readonly
  */
@@ -254,6 +254,45 @@ export const teamInvitations = pgTable(
 /* PHI tables — org_id + practice_id required, no "default" practiceId         */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Practice-scoped referral catalog (e.g. "Google", "Patient"). Not PHI by
+ * itself; still requires org_id + practice_id (no "default").
+ */
+export const referralSources = pgTable(
+  "referral_sources",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    name: text("name").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("referral_sources_org_practice_idx").on(table.orgId, table.practiceId),
+    uniqueIndex("referral_sources_practice_name_unique").on(
+      table.practiceId,
+      table.name,
+    ),
+  ],
+);
+
+/**
+ * Unified patient + conversion-funnel row (Week 8).
+ *
+ * Legacy split `patients` vs `patient_intakes` is collapsed here so a person
+ * is one PHI record. `patient_intakes` is reserved for later onboarding /
+ * checklists and is not the operational list.
+ *
+ * Encrypted at rest (PHI_ENCRYPTION_KEY, AES-256-GCM): email, phone,
+ * dateOfBirth, notes. date_of_birth is text (not date) so the envelope fits.
+ * RDS encryption-at-rest is still required.
+ */
 export const patients = pgTable(
   "patients",
   {
@@ -265,22 +304,45 @@ export const patients = pgTable(
       .notNull()
       .references(() => practices.id),
     name: text("name").notNull(),
-    // email, phone, dateOfBirth: AES-256-GCM ciphertext at rest (PHI_ENCRYPTION_KEY).
-    // date_of_birth is text (not date) so the envelope fits. RDS encryption-at-rest is still required.
     email: text("email"),
     phone: text("phone"),
     dateOfBirth: text("date_of_birth"),
     condition: text("condition"),
+    // Record status: active | inactive. Distinct from careStatus (funnel).
     status: text("status").notNull().default("active"),
+    // new | wellness
+    patientType: text("patient_type").notNull().default("new"),
+    typeName: text("type_name"),
+    referralSourceId: varchar("referral_source_id").references(
+      () => referralSources.id,
+    ),
+    // Denormalized catalog name (or free-text) for leaderboard grouping.
+    referralSource: text("referral_source"),
+    day1Date: date("day1_date"),
+    day2Date: date("day2_date"),
+    // new | in_care | wellness | discharged | lost
+    careStatus: text("care_status").notNull().default("new"),
+    converted: boolean("converted").notNull().default(false),
+    conversionDate: date("conversion_date"),
+    planType: text("plan_type"),
+    notes: text("notes"),
+    createdBy: varchar("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("patients_org_practice_idx").on(table.orgId, table.practiceId),
     index("patients_practice_id_idx").on(table.practiceId),
+    index("patients_practice_type_idx").on(table.practiceId, table.patientType),
+    index("patients_practice_day1_idx").on(table.practiceId, table.day1Date),
   ],
 );
 
+/**
+ * Reserved for future onboarding / checklist flows. Conversion funnel fields
+ * live on `patients` (unified in Week 8) so a person is one PHI row.
+ * org_id + practice_id required; no "default".
+ */
 export const patientIntakes = pgTable(
   "patient_intakes",
   {
@@ -422,6 +484,8 @@ export type PracticeMembership = typeof practiceMemberships.$inferSelect;
 export type Patient = typeof patients.$inferSelect;
 export type NewPatient = typeof patients.$inferInsert;
 export type PatientIntake = typeof patientIntakes.$inferSelect;
+export type ReferralSource = typeof referralSources.$inferSelect;
+export type NewReferralSource = typeof referralSources.$inferInsert;
 export type DailyStat = typeof dailyStats.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;

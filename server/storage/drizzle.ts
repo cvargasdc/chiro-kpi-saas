@@ -31,6 +31,7 @@ import type {
   StoredPatient,
   StoredPractice,
   StoredPracticeMembership,
+  StoredReferralSource,
   StoredUser,
   UserPatch,
 } from "./types";
@@ -156,6 +157,30 @@ function mapPatientRow(row: schema.Patient): StoredPatient {
     dateOfBirth: row.dateOfBirth,
     condition: row.condition,
     status: row.status,
+    patientType: row.patientType,
+    typeName: row.typeName ?? null,
+    referralSourceId: row.referralSourceId ?? null,
+    referralSource: row.referralSource ?? null,
+    day1Date: row.day1Date ?? null,
+    day2Date: row.day2Date ?? null,
+    careStatus: row.careStatus,
+    converted: row.converted,
+    conversionDate: row.conversionDate ?? null,
+    planType: row.planType ?? null,
+    notes: row.notes ?? null,
+    createdBy: row.createdBy ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapReferralSourceRow(row: schema.ReferralSource): StoredReferralSource {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    active: row.active,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -671,6 +696,18 @@ export class DrizzleStorage implements AppStorage {
         ),
         condition: input.condition ?? null,
         status: input.status ?? "active",
+        patientType: input.patientType ?? "new",
+        typeName: input.typeName ?? null,
+        referralSourceId: input.referralSourceId ?? null,
+        referralSource: input.referralSource ?? null,
+        day1Date: input.day1Date ?? null,
+        day2Date: input.day2Date ?? null,
+        careStatus: input.careStatus ?? "new",
+        converted: input.converted ?? false,
+        conversionDate: input.conversionDate ?? null,
+        planType: input.planType ?? null,
+        notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+        createdBy: input.createdBy ?? null,
       })
       .returning();
     return this.revealPatient(row);
@@ -736,6 +773,34 @@ export class DrizzleStorage implements AppStorage {
         condition:
           input.condition === undefined ? existing.condition : input.condition,
         status: input.status ?? existing.status,
+        patientType: input.patientType ?? existing.patientType,
+        typeName:
+          input.typeName === undefined ? existing.typeName : input.typeName,
+        referralSourceId:
+          input.referralSourceId === undefined
+            ? existing.referralSourceId
+            : input.referralSourceId,
+        referralSource:
+          input.referralSource === undefined
+            ? existing.referralSource
+            : input.referralSource,
+        day1Date:
+          input.day1Date === undefined ? existing.day1Date : input.day1Date,
+        day2Date:
+          input.day2Date === undefined ? existing.day2Date : input.day2Date,
+        careStatus: input.careStatus ?? existing.careStatus,
+        converted:
+          input.converted === undefined ? existing.converted : input.converted,
+        conversionDate:
+          input.conversionDate === undefined
+            ? existing.conversionDate
+            : input.conversionDate,
+        planType:
+          input.planType === undefined ? existing.planType : input.planType,
+        notes:
+          input.notes === undefined
+            ? undefined
+            : encryptPhiString(input.notes, this.phiEncryptionKey),
         updatedAt: new Date(),
       })
       .where(
@@ -762,6 +827,97 @@ export class DrizzleStorage implements AppStorage {
       )
       .returning({ id: schema.patients.id });
     return deleted.length > 0;
+  }
+
+  async listReferralSources(scope: TenantScope): Promise<StoredReferralSource[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.referralSources)
+      .where(
+        and(
+          eq(schema.referralSources.orgId, orgId),
+          eq(schema.referralSources.practiceId, practiceId),
+        ),
+      );
+    return rows
+      .map(mapReferralSourceRow)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getReferralSource(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredReferralSource | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.referralSources)
+      .where(
+        and(
+          eq(schema.referralSources.id, id),
+          eq(schema.referralSources.orgId, orgId),
+          eq(schema.referralSources.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapReferralSourceRow(row) : undefined;
+  }
+
+  async createReferralSource(
+    scope: TenantScope,
+    input: { name: string; active?: boolean },
+  ): Promise<StoredReferralSource> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.referralSources)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        active: input.active ?? true,
+      })
+      .returning();
+    return mapReferralSourceRow(row);
+  }
+
+  async ensureReferralSource(
+    scope: TenantScope,
+    name: string,
+  ): Promise<StoredReferralSource> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const trimmed = name.trim();
+    const existing = (await this.listReferralSources(scope)).find(
+      (row) => row.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existing) {
+      if (existing.active) return existing;
+      const [row] = await this.db
+        .update(schema.referralSources)
+        .set({ active: true, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.referralSources.id, existing.id),
+            eq(schema.referralSources.orgId, orgId),
+            eq(schema.referralSources.practiceId, practiceId),
+          ),
+        )
+        .returning();
+      return row ? mapReferralSourceRow(row) : existing;
+    }
+    try {
+      return await this.createReferralSource(scope, {
+        name: trimmed,
+        active: true,
+      });
+    } catch (err) {
+      if (!isPgUniqueViolation(err)) throw err;
+      const raced = (await this.listReferralSources(scope)).find(
+        (row) => row.name.toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (raced) return raced;
+      throw err;
+    }
   }
 
   async createDailyStat(

@@ -53,10 +53,12 @@ describe("patient storage ciphertext", () => {
       email: "alice@clinic.test",
       phone: "555-0100",
       dateOfBirth: "1980-01-15",
+      notes: "LBP after lift",
     });
     expect(created.email).toBe("alice@clinic.test");
     expect(created.phone).toBe("555-0100");
     expect(created.dateOfBirth).toBe("1980-01-15");
+    expect(created.notes).toBe("LBP after lift");
 
     const raw = store.patients[0];
     expect(raw.email).not.toBe("alice@clinic.test");
@@ -65,9 +67,11 @@ describe("patient storage ciphertext", () => {
     expect(raw.email).toMatch(/^v1:/);
     expect(raw.phone).toMatch(/^v1:/);
     expect(raw.dateOfBirth).toMatch(/^v1:/);
+    expect(raw.notes).toMatch(/^v1:/);
     expect(JSON.stringify(raw)).not.toContain("alice@clinic.test");
     expect(JSON.stringify(raw)).not.toContain("555-0100");
     expect(JSON.stringify(raw)).not.toContain("1980-01-15");
+    expect(JSON.stringify(raw)).not.toContain("LBP after lift");
 
     const listed = await store.listPatients(scope);
     expect(listed[0].email).toBe("alice@clinic.test");
@@ -94,6 +98,18 @@ describe("patient storage ciphertext", () => {
         dateOfBirth: null,
         condition: null,
         status: "active",
+        patientType: "new",
+        typeName: null,
+        referralSourceId: null,
+        referralSource: null,
+        day1Date: null,
+        day2Date: null,
+        careStatus: "new",
+        converted: false,
+        conversionDate: null,
+        planType: null,
+        notes: encryptPhiString("lumbar notes", KEY),
+        createdBy: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -101,5 +117,6 @@ describe("patient storage ciphertext", () => {
     );
     expect(row.name).toBe("Bob");
     expect(row.email).toBe("bob@clinic.test");
+    expect(row.notes).toBe("lumbar notes");
   });
 });
