@@ -10,6 +10,8 @@ import { registerDailyLogRoutes } from "./daily-log/http";
 import { registerDashboardRoutes } from "./dashboard/http";
 import { registerGoalRoutes } from "./goals/http";
 import { registerPatientRoutes } from "./patients/http";
+import { registerReportRoutes } from "./reports/http";
+import { registerTreatmentRoutes } from "./treatments/http";
 import {
   authenticate,
   getClientIp,
@@ -58,6 +60,8 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
   registerDashboardRoutes(app, ctx);
   registerGoalRoutes(app, ctx);
   registerPatientRoutes(app, ctx);
+  registerTreatmentRoutes(app, ctx);
+  registerReportRoutes(app, ctx);
 
   app.post("/api/organizations", auth, async (req, res) => {
     const parsed = createOrgSchema.safeParse(req.body);

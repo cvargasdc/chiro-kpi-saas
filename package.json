@@ -1,10 +1,10 @@
 {
   "name": "chiro-kpi-saas",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
-  "description": "Chiro-KPI Path B rebuild — multi-tenant HIPAA-oriented practice KPI SaaS (Week 8 patients + conversion funnel)",
+  "description": "Chiro-KPI Path B rebuild — multi-tenant HIPAA-oriented practice KPI SaaS (Week 9 services catalog + reports)",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build",
@@ -25,6 +25,7 @@
     "express-session": "^1.18.1",
     "helmet": "^8.3.0",
     "memorystore": "^1.6.7",
+    "pdfkit": "^0.20.2",
     "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -38,6 +39,7 @@
     "@types/express": "^4.17.21",
     "@types/express-session": "^1.18.1",
     "@types/node": "^20.17.16",
+    "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.11",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

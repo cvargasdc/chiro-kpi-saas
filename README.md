@@ -4,7 +4,7 @@ Multi-tenant practice KPI software for chiropractic clinics. This tree is a **gr
 
 **Path B:** treat patient identity, contact, clinical notes, and joinable operational rows as **ePHI from day one**.
 
-Week 8 adds the Patients conversion funnel (New vs Wellness, referral leaderboard, profiles) on top of Week 7 Goals and Week 6 Daily Log + Dashboard KPIs. Stripe checkout/portal/webhooks are unchanged. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
+Week 9 adds the Services / treatments catalog and practice Reports (period preview + PDF) on top of Week 8 Patients, Week 7 Goals, and Week 6 Daily Log + Dashboard KPIs. Stripe checkout/portal/webhooks are unchanged. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
 
 ---
 
@@ -19,8 +19,10 @@ Week 8 adds the Patients conversion funnel (New vs Wellness, referral leaderboar
 | Password reset + practice invites (email stub) | Live Resend (adapter documented) |
 | Stripe test-mode org subscriptions (no PHI) | Live Stripe keys / patient data in Stripe |
 | Patient directory + conversion funnel, isolated by practice | S3 |
-| Daily Log + Dashboard KPIs (visits, revenue, OVA, new patients, conversion) | Care plans, checklists, reports PDF |
+| Daily Log + Dashboard KPIs (visits, revenue, OVA, new patients, conversion) | Care Plan Generator, checklists, onboarding flows |
 | Goals (revenue / visits / custom) with pace status | New-patient and conversion goal types |
+| Services / treatments catalog (price book) | Projects, Advanced Metrics |
+| Reports preview + tenant-scoped PDF export | Emailed reports, CSV import parsers |
 | App-layer AES-256-GCM on patient email/phone/DOB/notes + daily-log notes | Hardcoded demo secrets |
 | CSV/Excel import **placeholder only** | Any deploy to Replit or production |
 | Local Docker Postgres + backup script skeleton | GitHub holding production PHI |
@@ -28,6 +30,7 @@ Week 8 adds the Patients conversion funnel (New vs Wellness, referral leaderboar
 
 Read next:
 
+- [docs/WEEK9-SERVICES-REPORTS.md](docs/WEEK9-SERVICES-REPORTS.md) — Treatments catalog, report periods, PDF export
 - [docs/WEEK8-PATIENTS.md](docs/WEEK8-PATIENTS.md) — Patients schema, conversion formula, referral leaderboard, dashboard availability
 - [docs/WEEK7-GOALS.md](docs/WEEK7-GOALS.md) — Goals schema, linear expected, status rules, money display
 - [docs/WEEK6-DAILY-DASHBOARD.md](docs/WEEK6-DAILY-DASHBOARD.md) — Daily Log, KPI formulas, period definitions
@@ -68,13 +71,13 @@ npm run dev
 
 `npm run dev` auto-loads `.env` via `dotenv` (development only). Values already set in the environment are **not** overridden, so you do not need `source .env`. Production does not read a `.env` file.
 
-Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows KPI cards (from the Daily Log plus new-patient/conversion once patients exist), goal pace, plan, and subscription status. **Daily Log**, **Goals**, and **Patients** are in the nav.
+Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows KPI cards (from the Daily Log plus new-patient/conversion once patients exist), goal pace, plan, and subscription status. **Daily Log**, **Goals**, **Patients**, **Services**, and **Reports** are in the nav.
 
 ### Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), daily log, dashboard math, goals, patients/conversion, schema tests |
+| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), daily log, dashboard math, goals, patients/conversion, treatments, reports/PDF, schema tests |
 | `npm run check` | TypeScript |
 | `npm run build` | Production client bundle → `dist/public` |
 | `npm run db:push` | Push Drizzle schema to local Postgres |
@@ -88,7 +91,7 @@ Open [http://localhost:5000](http://localhost:5000). Register a user — that cr
 
 PHI helpers refuse to run without both `orgId` and `practiceId`. There is no `"default"` practice.
 
-Automated tests assert **Practice A cannot read Practice B patients**, including by UUID and by spoofed `X-Practice-Id`.
+Automated tests assert **Practice A cannot read Practice B patients**, treatments, daily-log rows, goals, or report aggregates, including by UUID and by spoofed `X-Practice-Id`.
 
 To see the test fail when the filter is removed: delete the `practiceId` predicate in `MemoryStorage.listPatients` and re-run `npm test`. Details in [docs/WEEK2-FOUNDATION.md](docs/WEEK2-FOUNDATION.md).
 
@@ -96,7 +99,7 @@ To see the test fail when the filter is removed: delete the `practiceId` predica
 
 ## Audit retention
 
-`logAudit(...)` is wired into patient CRUD (including conversion and the referral leaderboard), daily log (create/update/delete/list/read), goals CRUD, dashboard reads, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
+`logAudit(...)` is wired into patient CRUD (including conversion and the referral leaderboard), daily log (create/update/delete/list/read), goals CRUD, treatments CRUD, dashboard and report reads, report PDF export, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
 
 ---
 

@@ -32,7 +32,10 @@ import type {
   StoredPractice,
   StoredPracticeMembership,
   StoredReferralSource,
+  StoredTreatment,
   StoredUser,
+  TreatmentPatch,
+  TreatmentWrite,
   UserPatch,
 } from "./types";
 
@@ -181,6 +184,22 @@ function mapReferralSourceRow(row: schema.ReferralSource): StoredReferralSource 
     practiceId: row.practiceId,
     name: row.name,
     active: row.active,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapTreatmentRow(row: schema.Treatment): StoredTreatment {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    description: row.description ?? null,
+    category: row.category,
+    priceCents: row.priceCents,
+    active: row.active,
+    sortOrder: row.sortOrder,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -1138,6 +1157,111 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning({ id: schema.goals.id });
+    return deleted.length > 0;
+  }
+
+  async createTreatment(
+    scope: TenantScope,
+    input: TreatmentWrite,
+  ): Promise<StoredTreatment> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.treatments)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        description: input.description ?? null,
+        category: input.category,
+        priceCents: input.priceCents,
+        active: input.active ?? true,
+        sortOrder: input.sortOrder ?? 0,
+      })
+      .returning();
+    return mapTreatmentRow(row);
+  }
+
+  async getTreatment(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredTreatment | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.treatments)
+      .where(
+        and(
+          eq(schema.treatments.id, id),
+          eq(schema.treatments.orgId, orgId),
+          eq(schema.treatments.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapTreatmentRow(row) : undefined;
+  }
+
+  async listTreatments(scope: TenantScope): Promise<StoredTreatment[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.treatments)
+      .where(
+        and(
+          eq(schema.treatments.orgId, orgId),
+          eq(schema.treatments.practiceId, practiceId),
+        ),
+      )
+      .orderBy(
+        schema.treatments.sortOrder,
+        schema.treatments.category,
+        schema.treatments.name,
+      );
+    return rows.map(mapTreatmentRow);
+  }
+
+  async updateTreatment(
+    scope: TenantScope,
+    id: string,
+    input: TreatmentPatch,
+  ): Promise<StoredTreatment | undefined> {
+    const existing = await this.getTreatment(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.treatments)
+      .set({
+        name: input.name ?? existing.name,
+        description:
+          input.description === undefined ? existing.description : input.description,
+        category: input.category ?? existing.category,
+        priceCents: input.priceCents ?? existing.priceCents,
+        active: input.active ?? existing.active,
+        sortOrder: input.sortOrder ?? existing.sortOrder,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.treatments.id, id),
+          eq(schema.treatments.orgId, orgId),
+          eq(schema.treatments.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapTreatmentRow(row) : undefined;
+  }
+
+  async deleteTreatment(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.treatments)
+      .where(
+        and(
+          eq(schema.treatments.id, id),
+          eq(schema.treatments.orgId, orgId),
+          eq(schema.treatments.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.treatments.id });
     return deleted.length > 0;
   }
 

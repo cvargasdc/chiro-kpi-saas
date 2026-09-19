@@ -210,6 +210,38 @@ export type GoalPatch = Partial<{
   notes: string | null;
 }>;
 
+export type StoredTreatment = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  description: string | null;
+  category: string;
+  priceCents: number;
+  active: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type TreatmentWrite = {
+  name: string;
+  description?: string | null;
+  category: string;
+  priceCents: number;
+  active?: boolean;
+  sortOrder?: number;
+};
+
+export type TreatmentPatch = Partial<{
+  name: string;
+  description: string | null;
+  category: string;
+  priceCents: number;
+  active: boolean;
+  sortOrder: number;
+}>;
+
 export type StoredAuditLog = {
   id: string;
   orgId: string;
@@ -383,6 +415,19 @@ export interface AppStorage {
   ): Promise<StoredGoal | undefined>;
   deleteGoal(scope: TenantScope, id: string): Promise<boolean>;
 
+  createTreatment(
+    scope: TenantScope,
+    input: TreatmentWrite,
+  ): Promise<StoredTreatment>;
+  getTreatment(scope: TenantScope, id: string): Promise<StoredTreatment | undefined>;
+  listTreatments(scope: TenantScope): Promise<StoredTreatment[]>;
+  updateTreatment(
+    scope: TenantScope,
+    id: string,
+    input: TreatmentPatch,
+  ): Promise<StoredTreatment | undefined>;
+  deleteTreatment(scope: TenantScope, id: string): Promise<boolean>;
+
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
   listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
   countAuditLogs(scope: TenantScope): Promise<number>;
@@ -437,4 +482,5 @@ export interface IsolationProbe {
   listDailyStatsMissingPracticeFilter(orgId: string): StoredDailyStat[];
   listGoalsMissingPracticeFilter(orgId: string): StoredGoal[];
   listReferralSourcesMissingPracticeFilter(orgId: string): StoredReferralSource[];
+  listTreatmentsMissingPracticeFilter(orgId: string): StoredTreatment[];
 }

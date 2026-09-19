@@ -7,6 +7,8 @@ import DailyLogPage from "./pages/DailyLog";
 import GoalsPage from "./pages/Goals";
 import PatientsPage from "./pages/Patients";
 import PatientDetailPage from "./pages/PatientDetail";
+import TreatmentsPage from "./pages/Treatments";
+import ReportsPage from "./pages/Reports";
 import ForgotPasswordPage from "./pages/ForgotPassword";
 import ResetPasswordPage from "./pages/ResetPassword";
 import MfaVerifyPage from "./pages/MfaVerify";
@@ -86,6 +88,23 @@ export default function App() {
       <Route path="/patients">
         {me ? (
           <PatientsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/services">
+        {me ? <Redirect to="/treatments" /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/treatments">
+        {me ? (
+          <TreatmentsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/reports">
+        {me ? (
+          <ReportsPage me={me} onLogout={() => setMe(null)} />
         ) : (
           <Redirect to="/login" />
         )}

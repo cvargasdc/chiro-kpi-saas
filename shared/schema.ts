@@ -22,7 +22,8 @@ import {
  * Tenant model:
  *   organizations (legal entity / BAA counterparty)
  *     └── practices (clinic / location)
- *           └── PHI rows (patients, intakes, referral_sources, daily_stats, goals, audit_logs)
+ *           └── PHI / tenant rows (patients, intakes, referral_sources,
+ *               daily_stats, goals, treatments, audit_logs)
  *
  * Memberships carry RBAC: owner | admin | clinician | staff | readonly
  */
@@ -445,6 +446,44 @@ export const goals = pgTable(
 );
 
 /**
+ * Practice services / treatments catalog (Week 9).
+ *
+ * Not patient PHI by itself (no names or clinical notes); still requires
+ * org_id + practice_id with no `"default"`. Care Plan Generator may consume
+ * this catalog later — this table is the list + price book only.
+ *
+ * - price_cents: integer USD cents, ≥ 0
+ * - category: free-text label (UI suggests Adjustment, Therapy, Exam, …)
+ * - active: soft-hide from the default list without deleting
+ * - sort_order: optional display order within a category (lower first)
+ */
+export const treatments = pgTable(
+  "treatments",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    name: text("name").notNull(),
+    description: text("description"),
+    category: text("category").notNull(),
+    priceCents: integer("price_cents").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("treatments_org_practice_idx").on(table.orgId, table.practiceId),
+    index("treatments_practice_category_idx").on(table.practiceId, table.category),
+    index("treatments_practice_active_idx").on(table.practiceId, table.active),
+  ],
+);
+
+/**
  * Append-only audit log. Retention intent: 6 years (HIPAA §164.530(j)).
  * Automated prune is NOT enabled in Week 2.
  */
@@ -488,6 +527,8 @@ export type ReferralSource = typeof referralSources.$inferSelect;
 export type NewReferralSource = typeof referralSources.$inferInsert;
 export type DailyStat = typeof dailyStats.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
+export type Treatment = typeof treatments.$inferSelect;
+export type NewTreatment = typeof treatments.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

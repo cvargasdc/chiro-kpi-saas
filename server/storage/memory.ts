@@ -30,7 +30,10 @@ import type {
   StoredPractice,
   StoredPracticeMembership,
   StoredReferralSource,
+  StoredTreatment,
   StoredUser,
+  TreatmentPatch,
+  TreatmentWrite,
   UserPatch,
 } from "./types";
 import type { MembershipRole } from "@shared/roles";
@@ -52,6 +55,7 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   dailyStats: StoredDailyStat[] = [];
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   goals: StoredGoal[] = [];
+  treatments: StoredTreatment[] = [];
   auditLogs: StoredAuditLog[] = [];
   passwordResetTokens: StoredPasswordResetToken[] = [];
   invitations: StoredInvitation[] = [];
@@ -726,6 +730,93 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     );
     if (index === -1) return false;
     this.goals.splice(index, 1);
+    return true;
+  }
+
+  async createTreatment(
+    scope: TenantScope,
+    input: TreatmentWrite,
+  ): Promise<StoredTreatment> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredTreatment = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      name: input.name,
+      description: input.description ?? null,
+      category: input.category,
+      priceCents: input.priceCents,
+      active: input.active ?? true,
+      sortOrder: input.sortOrder ?? 0,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.treatments.push(row);
+    return { ...row };
+  }
+
+  async getTreatment(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredTreatment | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.treatments.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listTreatments(scope: TenantScope): Promise<StoredTreatment[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.treatments
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        const cat = a.category.localeCompare(b.category);
+        if (cat !== 0) return cat;
+        return a.name.localeCompare(b.name);
+      })
+      .map((row) => ({ ...row }));
+  }
+
+  /**
+   * Deliberately unscoped (org only). Test-only. NEVER wire to an HTTP route.
+   */
+  listTreatmentsMissingPracticeFilter(orgId: string): StoredTreatment[] {
+    return this.treatments.filter((row) => row.orgId === orgId);
+  }
+
+  async updateTreatment(
+    scope: TenantScope,
+    id: string,
+    input: TreatmentPatch,
+  ): Promise<StoredTreatment | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.treatments.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.name !== undefined) existing.name = input.name;
+    if (input.description !== undefined) existing.description = input.description;
+    if (input.category !== undefined) existing.category = input.category;
+    if (input.priceCents !== undefined) existing.priceCents = input.priceCents;
+    if (input.active !== undefined) existing.active = input.active;
+    if (input.sortOrder !== undefined) existing.sortOrder = input.sortOrder;
+    existing.updatedAt = now();
+    return { ...existing };
+  }
+
+  async deleteTreatment(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.treatments.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.treatments.splice(index, 1);
     return true;
   }
 

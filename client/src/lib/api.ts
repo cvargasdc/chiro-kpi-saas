@@ -284,3 +284,85 @@ export type GoalMutationResponse = {
   today: string;
   goal: PublicGoal;
 };
+
+export type Treatment = {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  priceCents: number;
+  price: number;
+  priceDisplay: string;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TreatmentsListResponse = {
+  emptyState: "no_treatments" | "no_matches" | "has_data";
+  treatments: Treatment[];
+  grouped: Array<{ category: string; items: Treatment[] }>;
+  carePlanGenerator: { available: false; reason: string };
+};
+
+export type TreatmentMutationResponse = {
+  treatment: Treatment;
+};
+
+export type ReportPeriodKey =
+  | "weekly"
+  | "monthly"
+  | "quarterly"
+  | "annual"
+  | "custom";
+
+export type ReportTrendPoint = {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  visits: number;
+  revenueCents: number;
+  revenue: number;
+  partial: boolean;
+};
+
+export type ReportPreviewResponse = DashboardResponse & {
+  comparisonDefinition: string;
+  goals: {
+    emptyState: "no_goals" | "has_data";
+    overlappingCount: number;
+    counts: {
+      total: number;
+      achieved: number;
+      onPace: number;
+      behindPace: number;
+      belowTarget: number;
+      expired: number;
+    };
+    items: Array<{
+      id: string;
+      name: string;
+      metricType: string;
+      status: string;
+      statusLabel: string;
+      progressPercent: number;
+      currentDisplay: string;
+      targetDisplay: string;
+      startDate: string;
+      endDate: string;
+    }>;
+  };
+  referrals: {
+    emptyState: "no_entries" | "has_data";
+    formula: string;
+    rows: ReferralLeaderboardRow[];
+  };
+  trend: {
+    grain: "day" | "week";
+    grainReason: string;
+    emptyState: "no_entries" | "zeros_recorded" | "has_data";
+    points: ReportTrendPoint[];
+  };
+};

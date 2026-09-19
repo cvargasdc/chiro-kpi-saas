@@ -41,7 +41,7 @@ export default function AppShell({ me, onLogout, children }: Props) {
             </button>
           </div>
         </div>
-        <nav className="max-w-5xl mx-auto px-6 pb-3 flex gap-2 text-sm">
+        <nav className="max-w-5xl mx-auto px-6 pb-3 flex flex-wrap gap-2 text-sm">
           <NavLink href="/" current={location === "/" || location === "/dashboard"}>
             Dashboard
           </NavLink>
@@ -56,6 +56,15 @@ export default function AppShell({ me, onLogout, children }: Props) {
             current={location === "/patients" || location.startsWith("/patients/")}
           >
             Patients
+          </NavLink>
+          <NavLink
+            href="/treatments"
+            current={location === "/treatments" || location === "/services"}
+          >
+            Services
+          </NavLink>
+          <NavLink href="/reports" current={location === "/reports"}>
+            Reports
           </NavLink>
         </nav>
       </header>

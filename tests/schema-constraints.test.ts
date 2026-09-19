@@ -6,6 +6,7 @@ import {
   referralSources,
   dailyStats,
   goals,
+  treatments,
   auditLogs,
   practices,
   passwordResetTokens,
@@ -28,6 +29,7 @@ describe("Path B schema constraints", () => {
       referralSources,
       dailyStats,
       goals,
+      treatments,
       auditLogs,
     ]) {
       expect(table.orgId).toBeDefined();
@@ -100,6 +102,17 @@ describe("Path B schema constraints", () => {
     expect(goals.practiceId.notNull).toBe(true);
     const goalsTable = SCHEMA.slice(SCHEMA.indexOf("export const goals = pgTable"));
     expect(goalsTable).not.toMatch(/active:\s*integer\("active"\)/);
+  });
+
+  it("stores treatments catalog with integer cents and required tenant keys", () => {
+    expect(SCHEMA).toMatch(/priceCents:\s*integer\("price_cents"\)/);
+    expect(SCHEMA).toMatch(/sortOrder:\s*integer\("sort_order"\)/);
+    expect(SCHEMA).toMatch(/export const treatments = pgTable/);
+    expect(treatments.orgId.notNull).toBe(true);
+    expect(treatments.practiceId.notNull).toBe(true);
+    expect(treatments.priceCents.notNull).toBe(true);
+    expect(treatments.active.notNull).toBe(true);
+    expect(PKG.dependencies?.pdfkit).toBeDefined();
   });
 
   it("does not ship ChiroTouch parsers", () => {
