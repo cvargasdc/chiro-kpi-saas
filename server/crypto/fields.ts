@@ -7,6 +7,7 @@ import type {
   StoredPatient,
   StoredPatientChecklist,
   StoredPatientChecklistTask,
+  StoredProjectTask,
 } from "../storage/types";
 
 /**
@@ -154,6 +155,16 @@ export function decryptStoredCarePlan(row: StoredCarePlan, key: string): StoredC
     ...row,
     firstName: decryptPhiString(row.firstName, key) ?? "",
     lastName: decryptPhiString(row.lastName, key) ?? "",
+    notes: decryptPhiString(row.notes, key),
+  };
+}
+
+export function decryptStoredProjectTask(
+  row: StoredProjectTask,
+  key: string,
+): StoredProjectTask {
+  return {
+    ...row,
     notes: decryptPhiString(row.notes, key),
   };
 }

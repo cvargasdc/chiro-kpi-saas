@@ -15,6 +15,7 @@ import { registerOnboardingRoutes } from "./onboarding/http";
 import { registerPracticeChecklistRoutes } from "./practice-checklists/http";
 import { registerTreatmentRoutes } from "./treatments/http";
 import { registerCarePlanRoutes } from "./care-plans/http";
+import { registerProjectRoutes } from "./projects/http";
 import {
   authenticate,
   getClientIp,
@@ -65,6 +66,7 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
   registerPatientRoutes(app, ctx);
   registerTreatmentRoutes(app, ctx);
   registerCarePlanRoutes(app, ctx);
+  registerProjectRoutes(app, ctx);
   registerReportRoutes(app, ctx);
   registerPracticeChecklistRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx);

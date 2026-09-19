@@ -23,7 +23,7 @@ import {
  *   organizations (legal entity / BAA counterparty)
  *     └── practices (clinic / location)
  *           └── PHI / tenant rows (patients, intakes, referral_sources,
- *               daily_stats, goals, treatments, audit_logs)
+ *               daily_stats, goals, treatments, projects, audit_logs)
  *
  * Memberships carry RBAC: owner | admin | clinician | staff | readonly
  */
@@ -844,6 +844,103 @@ export const patientChecklistTasks = pgTable(
 );
 
 /**
+ * Practice Projects (Week 12). Path B: org_id + practice_id, no `"default"`.
+ *
+ * Templates vs active: same table, `status` = active | archived | template.
+ * A separate templates table was rejected so duplicate can copy columns/tasks
+ * from either a template or an existing project with one code path. The UI
+ * lists templates in their own section and never mixes them into active cards.
+ *
+ * Child rows also carry org_id + practice_id. Task notes are AES-256-GCM at
+ * rest (PHI_ENCRYPTION_KEY). Titles are plaintext ops text — do not put
+ * patient names in titles; never put titles/notes in audit metadata.
+ */
+export const projects = pgTable(
+  "projects",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    name: text("name").notNull(),
+    description: text("description"),
+    // active | archived | template
+    status: text("status").notNull().default("active"),
+    tags: text("tags")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdBy: varchar("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("projects_org_practice_idx").on(table.orgId, table.practiceId),
+    index("projects_practice_status_idx").on(table.practiceId, table.status),
+  ],
+);
+
+export const projectColumns = pgTable(
+  "project_columns",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    projectId: varchar("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("project_columns_org_practice_idx").on(table.orgId, table.practiceId),
+    index("project_columns_project_idx").on(table.projectId),
+  ],
+);
+
+export const projectTasks = pgTable(
+  "project_tasks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    projectId: varchar("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    columnId: varchar("column_id")
+      .notNull()
+      .references(() => projectColumns.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    // Ciphertext when PHI_ENCRYPTION_KEY is set (notes_enc in the product spec).
+    notes: text("notes"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    done: boolean("done").notNull().default(false),
+    dueDate: date("due_date"),
+    assigneeName: text("assignee_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("project_tasks_org_practice_idx").on(table.orgId, table.practiceId),
+    index("project_tasks_project_idx").on(table.projectId),
+    index("project_tasks_column_idx").on(table.columnId),
+  ],
+);
+
+/**
  * Append-only audit log. Retention intent: 6 years (HIPAA §164.530(j)).
  * Automated prune is NOT enabled in Week 2.
  */
@@ -903,6 +1000,12 @@ export type ChecklistTemplate = typeof checklistTemplates.$inferSelect;
 export type ChecklistTemplateTask = typeof checklistTemplateTasks.$inferSelect;
 export type PatientChecklist = typeof patientChecklists.$inferSelect;
 export type PatientChecklistTask = typeof patientChecklistTasks.$inferSelect;
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
+export type ProjectColumn = typeof projectColumns.$inferSelect;
+export type NewProjectColumn = typeof projectColumns.$inferInsert;
+export type ProjectTask = typeof projectTasks.$inferSelect;
+export type NewProjectTask = typeof projectTasks.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

@@ -11,6 +11,9 @@ import {
   carePlanTemplates,
   carePlans,
   carePlanComplianceAcks,
+  projects,
+  projectColumns,
+  projectTasks,
   practiceChecklists,
   practiceChecklistItems,
   practiceChecklistCompletions,
@@ -45,6 +48,9 @@ describe("Path B schema constraints", () => {
       carePlanTemplates,
       carePlans,
       carePlanComplianceAcks,
+      projects,
+      projectColumns,
+      projectTasks,
       practiceChecklists,
       practiceChecklistItems,
       practiceChecklistCompletions,
@@ -168,6 +174,21 @@ describe("Path B schema constraints", () => {
     expect(practiceSettings.practiceId.notNull).toBe(true);
     expect(carePlanComplianceAcks.orgId.notNull).toBe(true);
     expect(carePlanComplianceAcks.practiceId.notNull).toBe(true);
+  });
+
+  it("stores projects with a template status flag (not a separate templates table)", () => {
+    expect(SCHEMA).toMatch(/export const projects = pgTable/);
+    expect(SCHEMA).toMatch(/export const projectColumns = pgTable/);
+    expect(SCHEMA).toMatch(/export const projectTasks = pgTable/);
+    expect(SCHEMA).toMatch(/active \| archived \| template/);
+    expect(SCHEMA).toMatch(/A separate templates table was rejected/);
+    expect(projects.orgId.notNull).toBe(true);
+    expect(projects.practiceId.notNull).toBe(true);
+    expect(projectColumns.orgId.notNull).toBe(true);
+    expect(projectColumns.practiceId.notNull).toBe(true);
+    expect(projectTasks.orgId.notNull).toBe(true);
+    expect(projectTasks.practiceId.notNull).toBe(true);
+    expect(SCHEMA).toMatch(/never put titles\/notes in audit metadata/);
   });
 
   it("does not ship ChiroTouch parsers", () => {

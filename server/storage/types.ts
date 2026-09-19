@@ -521,6 +521,97 @@ export type PatientChecklistTaskPatch = Partial<{
   completedAt: Date | null;
 }>;
 
+export type StoredProject = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  description: string | null;
+  status: string;
+  tags: string[];
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ProjectWrite = {
+  name: string;
+  description?: string | null;
+  status?: string;
+  tags?: string[];
+  createdBy?: string | null;
+};
+
+export type ProjectPatch = Partial<{
+  name: string;
+  description: string | null;
+  status: string;
+  tags: string[];
+}>;
+
+export type StoredProjectColumn = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  projectId: string;
+  name: string;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ProjectColumnWrite = {
+  projectId: string;
+  name: string;
+  sortOrder?: number;
+};
+
+export type ProjectColumnPatch = Partial<{
+  name: string;
+  sortOrder: number;
+}>;
+
+/**
+ * Callers of the storage layer always see plaintext notes.
+ * The `notes` column holds ciphertext when PHI_ENCRYPTION_KEY is set.
+ */
+export type StoredProjectTask = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  projectId: string;
+  columnId: string;
+  title: string;
+  notes: string | null;
+  sortOrder: number;
+  done: boolean;
+  dueDate: string | null;
+  assigneeName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ProjectTaskWrite = {
+  projectId: string;
+  columnId: string;
+  title: string;
+  notes?: string | null;
+  sortOrder?: number;
+  done?: boolean;
+  dueDate?: string | null;
+  assigneeName?: string | null;
+};
+
+export type ProjectTaskPatch = Partial<{
+  columnId: string;
+  title: string;
+  notes: string | null;
+  sortOrder: number;
+  done: boolean;
+  dueDate: string | null;
+  assigneeName: string | null;
+}>;
+
 export type StoredAuditLog = {
   id: string;
   orgId: string;
@@ -877,6 +968,58 @@ export interface AppStorage {
   ): Promise<StoredPatientChecklistTask | undefined>;
   deletePatientChecklistTask(scope: TenantScope, id: string): Promise<boolean>;
 
+  createProject(scope: TenantScope, input: ProjectWrite): Promise<StoredProject>;
+  getProject(scope: TenantScope, id: string): Promise<StoredProject | undefined>;
+  listProjects(scope: TenantScope, status?: string): Promise<StoredProject[]>;
+  updateProject(
+    scope: TenantScope,
+    id: string,
+    input: ProjectPatch,
+  ): Promise<StoredProject | undefined>;
+  deleteProject(scope: TenantScope, id: string): Promise<boolean>;
+
+  createProjectColumn(
+    scope: TenantScope,
+    input: ProjectColumnWrite,
+  ): Promise<StoredProjectColumn>;
+  getProjectColumn(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProjectColumn | undefined>;
+  listProjectColumns(
+    scope: TenantScope,
+    projectId?: string,
+  ): Promise<StoredProjectColumn[]>;
+  updateProjectColumn(
+    scope: TenantScope,
+    id: string,
+    input: ProjectColumnPatch,
+  ): Promise<StoredProjectColumn | undefined>;
+  deleteProjectColumn(scope: TenantScope, id: string): Promise<boolean>;
+  countProjectTasksInColumn(
+    scope: TenantScope,
+    columnId: string,
+  ): Promise<number>;
+
+  createProjectTask(
+    scope: TenantScope,
+    input: ProjectTaskWrite,
+  ): Promise<StoredProjectTask>;
+  getProjectTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProjectTask | undefined>;
+  listProjectTasks(
+    scope: TenantScope,
+    projectId?: string,
+  ): Promise<StoredProjectTask[]>;
+  updateProjectTask(
+    scope: TenantScope,
+    id: string,
+    input: ProjectTaskPatch,
+  ): Promise<StoredProjectTask | undefined>;
+  deleteProjectTask(scope: TenantScope, id: string): Promise<boolean>;
+
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
   listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
   countAuditLogs(scope: TenantScope): Promise<number>;
@@ -937,4 +1080,5 @@ export interface IsolationProbe {
   listPatientChecklistsMissingPracticeFilter(orgId: string): StoredPatientChecklist[];
   listCarePlansMissingPracticeFilter(orgId: string): StoredCarePlan[];
   listCarePlanTemplatesMissingPracticeFilter(orgId: string): StoredCarePlanTemplate[];
+  listProjectsMissingPracticeFilter(orgId: string): StoredProject[];
 }

@@ -18,6 +18,7 @@ import {
   decryptStoredPatient,
   decryptStoredPatientChecklist,
   decryptStoredPatientChecklistTask,
+  decryptStoredProjectTask,
   encryptCarePlanSensitiveFields,
   encryptPhiString,
 } from "../crypto/fields";
@@ -79,6 +80,15 @@ import type {
   StoredPatientChecklistTask,
   PatientChecklistTaskWrite,
   PatientChecklistTaskPatch,
+  StoredProject,
+  ProjectWrite,
+  ProjectPatch,
+  StoredProjectColumn,
+  ProjectColumnWrite,
+  ProjectColumnPatch,
+  StoredProjectTask,
+  ProjectTaskWrite,
+  ProjectTaskPatch,
 } from "./types";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -445,6 +455,52 @@ function mapPatientChecklistTaskRow(
   };
 }
 
+function mapProjectRow(row: schema.Project): StoredProject {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    description: row.description ?? null,
+    status: row.status,
+    tags: Array.isArray(row.tags) ? [...row.tags] : [],
+    createdBy: row.createdBy ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapProjectColumnRow(row: schema.ProjectColumn): StoredProjectColumn {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    projectId: row.projectId,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapProjectTaskRow(row: schema.ProjectTask): StoredProjectTask {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    projectId: row.projectId,
+    columnId: row.columnId,
+    title: row.title,
+    notes: row.notes ?? null,
+    sortOrder: row.sortOrder,
+    done: row.done,
+    dueDate: row.dueDate ?? null,
+    assigneeName: row.assigneeName ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export class DrizzleStorage implements AppStorage {
   private readonly phiEncryptionKey: string;
 
@@ -486,6 +542,13 @@ export class DrizzleStorage implements AppStorage {
   ): StoredPatientChecklistTask {
     return decryptStoredPatientChecklistTask(
       mapPatientChecklistTaskRow(row),
+      this.phiEncryptionKey,
+    );
+  }
+
+  private revealProjectTask(row: schema.ProjectTask): StoredProjectTask {
+    return decryptStoredProjectTask(
+      mapProjectTaskRow(row),
       this.phiEncryptionKey,
     );
   }
@@ -2622,6 +2685,350 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning({ id: schema.carePlans.id });
+    return deleted.length > 0;
+  }
+
+  async createProject(
+    scope: TenantScope,
+    input: ProjectWrite,
+  ): Promise<StoredProject> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.projects)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        description: input.description ?? null,
+        status: input.status ?? "active",
+        tags: input.tags ?? [],
+        createdBy: input.createdBy ?? null,
+      })
+      .returning();
+    return mapProjectRow(row);
+  }
+
+  async getProject(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProject | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.projects)
+      .where(
+        and(
+          eq(schema.projects.id, id),
+          eq(schema.projects.orgId, orgId),
+          eq(schema.projects.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapProjectRow(row) : undefined;
+  }
+
+  async listProjects(
+    scope: TenantScope,
+    status?: string,
+  ): Promise<StoredProject[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.projects.orgId, orgId),
+      eq(schema.projects.practiceId, practiceId),
+    ];
+    if (status) filters.push(eq(schema.projects.status, status));
+    const rows = await this.db
+      .select()
+      .from(schema.projects)
+      .where(and(...filters))
+      .orderBy(desc(schema.projects.updatedAt));
+    return rows.map(mapProjectRow);
+  }
+
+  async updateProject(
+    scope: TenantScope,
+    id: string,
+    input: ProjectPatch,
+  ): Promise<StoredProject | undefined> {
+    const existing = await this.getProject(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.projects)
+      .set({
+        name: input.name ?? existing.name,
+        description:
+          input.description === undefined
+            ? existing.description
+            : input.description,
+        status: input.status ?? existing.status,
+        tags: input.tags ?? existing.tags,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.projects.id, id),
+          eq(schema.projects.orgId, orgId),
+          eq(schema.projects.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapProjectRow(row) : undefined;
+  }
+
+  async deleteProject(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.projects)
+      .where(
+        and(
+          eq(schema.projects.id, id),
+          eq(schema.projects.orgId, orgId),
+          eq(schema.projects.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.projects.id });
+    return deleted.length > 0;
+  }
+
+  async createProjectColumn(
+    scope: TenantScope,
+    input: ProjectColumnWrite,
+  ): Promise<StoredProjectColumn> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.projectColumns)
+      .values({
+        orgId,
+        practiceId,
+        projectId: input.projectId,
+        name: input.name,
+        sortOrder: input.sortOrder ?? 0,
+      })
+      .returning();
+    return mapProjectColumnRow(row);
+  }
+
+  async getProjectColumn(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProjectColumn | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.projectColumns)
+      .where(
+        and(
+          eq(schema.projectColumns.id, id),
+          eq(schema.projectColumns.orgId, orgId),
+          eq(schema.projectColumns.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapProjectColumnRow(row) : undefined;
+  }
+
+  async listProjectColumns(
+    scope: TenantScope,
+    projectId?: string,
+  ): Promise<StoredProjectColumn[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.projectColumns.orgId, orgId),
+      eq(schema.projectColumns.practiceId, practiceId),
+    ];
+    if (projectId) {
+      filters.push(eq(schema.projectColumns.projectId, projectId));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.projectColumns)
+      .where(and(...filters))
+      .orderBy(
+        schema.projectColumns.projectId,
+        schema.projectColumns.sortOrder,
+        schema.projectColumns.name,
+      );
+    return rows.map(mapProjectColumnRow);
+  }
+
+  async updateProjectColumn(
+    scope: TenantScope,
+    id: string,
+    input: ProjectColumnPatch,
+  ): Promise<StoredProjectColumn | undefined> {
+    const existing = await this.getProjectColumn(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.projectColumns)
+      .set({
+        name: input.name ?? existing.name,
+        sortOrder: input.sortOrder ?? existing.sortOrder,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.projectColumns.id, id),
+          eq(schema.projectColumns.orgId, orgId),
+          eq(schema.projectColumns.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapProjectColumnRow(row) : undefined;
+  }
+
+  async deleteProjectColumn(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.projectColumns)
+      .where(
+        and(
+          eq(schema.projectColumns.id, id),
+          eq(schema.projectColumns.orgId, orgId),
+          eq(schema.projectColumns.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.projectColumns.id });
+    return deleted.length > 0;
+  }
+
+  async countProjectTasksInColumn(
+    scope: TenantScope,
+    columnId: string,
+  ): Promise<number> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(schema.projectTasks)
+      .where(
+        and(
+          eq(schema.projectTasks.columnId, columnId),
+          eq(schema.projectTasks.orgId, orgId),
+          eq(schema.projectTasks.practiceId, practiceId),
+        ),
+      );
+    return Number(row?.value ?? 0);
+  }
+
+  async createProjectTask(
+    scope: TenantScope,
+    input: ProjectTaskWrite,
+  ): Promise<StoredProjectTask> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.projectTasks)
+      .values({
+        orgId,
+        practiceId,
+        projectId: input.projectId,
+        columnId: input.columnId,
+        title: input.title,
+        notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+        sortOrder: input.sortOrder ?? 0,
+        done: input.done ?? false,
+        dueDate: input.dueDate ?? null,
+        assigneeName: input.assigneeName ?? null,
+      })
+      .returning();
+    return this.revealProjectTask(row);
+  }
+
+  async getProjectTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProjectTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.projectTasks)
+      .where(
+        and(
+          eq(schema.projectTasks.id, id),
+          eq(schema.projectTasks.orgId, orgId),
+          eq(schema.projectTasks.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? this.revealProjectTask(row) : undefined;
+  }
+
+  async listProjectTasks(
+    scope: TenantScope,
+    projectId?: string,
+  ): Promise<StoredProjectTask[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.projectTasks.orgId, orgId),
+      eq(schema.projectTasks.practiceId, practiceId),
+    ];
+    if (projectId) {
+      filters.push(eq(schema.projectTasks.projectId, projectId));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.projectTasks)
+      .where(and(...filters))
+      .orderBy(
+        schema.projectTasks.projectId,
+        schema.projectTasks.sortOrder,
+        schema.projectTasks.createdAt,
+      );
+    return rows.map((row) => this.revealProjectTask(row));
+  }
+
+  async updateProjectTask(
+    scope: TenantScope,
+    id: string,
+    input: ProjectTaskPatch,
+  ): Promise<StoredProjectTask | undefined> {
+    const existing = await this.getProjectTask(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.projectTasks)
+      .set({
+        columnId: input.columnId ?? existing.columnId,
+        title: input.title ?? existing.title,
+        notes:
+          input.notes === undefined
+            ? undefined
+            : encryptPhiString(input.notes, this.phiEncryptionKey),
+        sortOrder: input.sortOrder ?? existing.sortOrder,
+        done: input.done ?? existing.done,
+        dueDate: input.dueDate === undefined ? existing.dueDate : input.dueDate,
+        assigneeName:
+          input.assigneeName === undefined
+            ? existing.assigneeName
+            : input.assigneeName,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.projectTasks.id, id),
+          eq(schema.projectTasks.orgId, orgId),
+          eq(schema.projectTasks.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? this.revealProjectTask(row) : undefined;
+  }
+
+  async deleteProjectTask(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.projectTasks)
+      .where(
+        and(
+          eq(schema.projectTasks.id, id),
+          eq(schema.projectTasks.orgId, orgId),
+          eq(schema.projectTasks.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.projectTasks.id });
     return deleted.length > 0;
   }
 

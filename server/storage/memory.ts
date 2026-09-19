@@ -6,6 +6,7 @@ import {
   decryptStoredPatient,
   decryptStoredPatientChecklist,
   decryptStoredPatientChecklistTask,
+  decryptStoredProjectTask,
   encryptCarePlanSensitiveFields,
   encryptPhiString,
 } from "../crypto/fields";
@@ -68,6 +69,15 @@ import type {
   StoredPatientChecklistTask,
   PatientChecklistTaskWrite,
   PatientChecklistTaskPatch,
+  StoredProject,
+  ProjectWrite,
+  ProjectPatch,
+  StoredProjectColumn,
+  ProjectColumnWrite,
+  ProjectColumnPatch,
+  StoredProjectTask,
+  ProjectTaskWrite,
+  ProjectTaskPatch,
 } from "./types";
 import type { MembershipRole } from "@shared/roles";
 
@@ -103,6 +113,10 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   patientChecklists: StoredPatientChecklist[] = [];
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   patientChecklistTasks: StoredPatientChecklistTask[] = [];
+  projects: StoredProject[] = [];
+  projectColumns: StoredProjectColumn[] = [];
+  /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  projectTasks: StoredProjectTask[] = [];
   auditLogs: StoredAuditLog[] = [];
   passwordResetTokens: StoredPasswordResetToken[] = [];
   invitations: StoredInvitation[] = [];
@@ -1827,6 +1841,293 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     );
     if (index === -1) return false;
     this.patientChecklistTasks.splice(index, 1);
+    return true;
+  }
+
+  async createProject(
+    scope: TenantScope,
+    input: ProjectWrite,
+  ): Promise<StoredProject> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredProject = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      name: input.name,
+      description: input.description ?? null,
+      status: input.status ?? "active",
+      tags: [...(input.tags ?? [])],
+      createdBy: input.createdBy ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.projects.push(row);
+    return { ...row, tags: [...row.tags] };
+  }
+
+  async getProject(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProject | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.projects.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row, tags: [...row.tags] } : undefined;
+  }
+
+  async listProjects(
+    scope: TenantScope,
+    status?: string,
+  ): Promise<StoredProject[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.projects
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (status ? row.status === status : true),
+      )
+      .slice()
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .map((row) => ({ ...row, tags: [...row.tags] }));
+  }
+
+  listProjectsMissingPracticeFilter(orgId: string): StoredProject[] {
+    return this.projects
+      .filter((row) => row.orgId === orgId)
+      .map((row) => ({ ...row, tags: [...row.tags] }));
+  }
+
+  async updateProject(
+    scope: TenantScope,
+    id: string,
+    input: ProjectPatch,
+  ): Promise<StoredProject | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.projects.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.name !== undefined) existing.name = input.name;
+    if (input.description !== undefined) existing.description = input.description;
+    if (input.status !== undefined) existing.status = input.status;
+    if (input.tags !== undefined) existing.tags = [...input.tags];
+    existing.updatedAt = now();
+    return { ...existing, tags: [...existing.tags] };
+  }
+
+  async deleteProject(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.projects.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.projectTasks = this.projectTasks.filter((row) => row.projectId !== id);
+    this.projectColumns = this.projectColumns.filter(
+      (row) => row.projectId !== id,
+    );
+    this.projects.splice(index, 1);
+    return true;
+  }
+
+  async createProjectColumn(
+    scope: TenantScope,
+    input: ProjectColumnWrite,
+  ): Promise<StoredProjectColumn> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredProjectColumn = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      projectId: input.projectId,
+      name: input.name,
+      sortOrder: input.sortOrder ?? 0,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.projectColumns.push(row);
+    return { ...row };
+  }
+
+  async getProjectColumn(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProjectColumn | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.projectColumns.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listProjectColumns(
+    scope: TenantScope,
+    projectId?: string,
+  ): Promise<StoredProjectColumn[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.projectColumns
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (projectId ? row.projectId === projectId : true),
+      )
+      .slice()
+      .sort((a, b) => {
+        if (a.projectId !== b.projectId) {
+          return a.projectId.localeCompare(b.projectId);
+        }
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.name.localeCompare(b.name);
+      })
+      .map((row) => ({ ...row }));
+  }
+
+  async updateProjectColumn(
+    scope: TenantScope,
+    id: string,
+    input: ProjectColumnPatch,
+  ): Promise<StoredProjectColumn | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.projectColumns.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.name !== undefined) existing.name = input.name;
+    if (input.sortOrder !== undefined) existing.sortOrder = input.sortOrder;
+    existing.updatedAt = now();
+    return { ...existing };
+  }
+
+  async deleteProjectColumn(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.projectColumns.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.projectTasks = this.projectTasks.filter((row) => row.columnId !== id);
+    this.projectColumns.splice(index, 1);
+    return true;
+  }
+
+  async countProjectTasksInColumn(
+    scope: TenantScope,
+    columnId: string,
+  ): Promise<number> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.projectTasks.filter(
+      (row) =>
+        row.columnId === columnId &&
+        row.orgId === orgId &&
+        row.practiceId === practiceId,
+    ).length;
+  }
+
+  async createProjectTask(
+    scope: TenantScope,
+    input: ProjectTaskWrite,
+  ): Promise<StoredProjectTask> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredProjectTask = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      projectId: input.projectId,
+      columnId: input.columnId,
+      title: input.title,
+      notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+      sortOrder: input.sortOrder ?? 0,
+      done: input.done ?? false,
+      dueDate: input.dueDate ?? null,
+      assigneeName: input.assigneeName ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.projectTasks.push(row);
+    return decryptStoredProjectTask({ ...row }, this.phiEncryptionKey);
+  }
+
+  async getProjectTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredProjectTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.projectTasks.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row
+      ? decryptStoredProjectTask({ ...row }, this.phiEncryptionKey)
+      : undefined;
+  }
+
+  async listProjectTasks(
+    scope: TenantScope,
+    projectId?: string,
+  ): Promise<StoredProjectTask[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.projectTasks
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (projectId ? row.projectId === projectId : true),
+      )
+      .slice()
+      .sort((a, b) => {
+        if (a.projectId !== b.projectId) {
+          return a.projectId.localeCompare(b.projectId);
+        }
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      })
+      .map((row) => decryptStoredProjectTask({ ...row }, this.phiEncryptionKey));
+  }
+
+  async updateProjectTask(
+    scope: TenantScope,
+    id: string,
+    input: ProjectTaskPatch,
+  ): Promise<StoredProjectTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.projectTasks.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.columnId !== undefined) existing.columnId = input.columnId;
+    if (input.title !== undefined) existing.title = input.title;
+    if (input.notes !== undefined) {
+      existing.notes = encryptPhiString(input.notes, this.phiEncryptionKey);
+    }
+    if (input.sortOrder !== undefined) existing.sortOrder = input.sortOrder;
+    if (input.done !== undefined) existing.done = input.done;
+    if (input.dueDate !== undefined) existing.dueDate = input.dueDate;
+    if (input.assigneeName !== undefined) {
+      existing.assigneeName = input.assigneeName;
+    }
+    existing.updatedAt = now();
+    return decryptStoredProjectTask({ ...existing }, this.phiEncryptionKey);
+  }
+
+  async deleteProjectTask(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.projectTasks.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.projectTasks.splice(index, 1);
     return true;
   }
 

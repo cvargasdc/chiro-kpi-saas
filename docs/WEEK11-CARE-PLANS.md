@@ -156,4 +156,4 @@ Generated with pdfkit on the server. Includes patient name, services, payment qu
 
 ## Out of scope (this week)
 
-Projects, Advanced Metrics, CSV import, emailed reports, new Stripe work, OpenAI, ChiroTouch.
+Advanced Metrics, CSV import, emailed reports, new Stripe work, OpenAI, ChiroTouch. (Projects: see [WEEK12-PROJECTS.md](./WEEK12-PROJECTS.md).)

@@ -553,6 +553,58 @@ export type TreatmentMutationResponse = {
   treatment: Treatment;
 };
 
+export type ProjectStatus = "active" | "archived" | "template" | string;
+
+export type ProjectTask = {
+  id: string;
+  projectId: string;
+  columnId: string;
+  title: string;
+  notes: string | null;
+  sortOrder: number;
+  done: boolean;
+  dueDate: string | null;
+  assigneeName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectColumn = {
+  id: string;
+  projectId: string;
+  name: string;
+  sortOrder: number;
+  tasks?: ProjectTask[];
+  taskCount?: number;
+  doneCount?: number;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: ProjectStatus;
+  tags: string[];
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+  doneCount: number;
+  completionPercent: number;
+  columns?: ProjectColumn[];
+};
+
+export type ProjectsListResponse = {
+  emptyState: "no_projects" | "has_data";
+  projects: Project[];
+  templates: Project[];
+  archivedCount: number;
+};
+
+export type ProjectDetailResponse = {
+  project: Project;
+};
+
 export type ReportPeriodKey =
   | "weekly"
   | "monthly"
