@@ -7,6 +7,13 @@ import {
   dailyStats,
   goals,
   treatments,
+  practiceChecklists,
+  practiceChecklistItems,
+  practiceChecklistCompletions,
+  checklistTemplates,
+  checklistTemplateTasks,
+  patientChecklists,
+  patientChecklistTasks,
   auditLogs,
   practices,
   passwordResetTokens,
@@ -30,6 +37,13 @@ describe("Path B schema constraints", () => {
       dailyStats,
       goals,
       treatments,
+      practiceChecklists,
+      practiceChecklistItems,
+      practiceChecklistCompletions,
+      checklistTemplates,
+      checklistTemplateTasks,
+      patientChecklists,
+      patientChecklistTasks,
       auditLogs,
     ]) {
       expect(table.orgId).toBeDefined();
@@ -113,6 +127,21 @@ describe("Path B schema constraints", () => {
     expect(treatments.priceCents.notNull).toBe(true);
     expect(treatments.active.notNull).toBe(true);
     expect(PKG.dependencies?.pdfkit).toBeDefined();
+  });
+
+  it("stores practice checklists and patient onboarding as separate tables", () => {
+    expect(SCHEMA).toMatch(/export const practiceChecklists = pgTable/);
+    expect(SCHEMA).toMatch(/export const checklistTemplates = pgTable/);
+    expect(SCHEMA).toMatch(/export const patientChecklists = pgTable/);
+    expect(SCHEMA).toMatch(/practice_checklist_completions_item_date_unique/);
+    expect(practiceChecklists.orgId.notNull).toBe(true);
+    expect(practiceChecklists.practiceId.notNull).toBe(true);
+    expect(patientChecklists.orgId.notNull).toBe(true);
+    expect(patientChecklists.practiceId.notNull).toBe(true);
+    expect(patientChecklistTasks.orgId.notNull).toBe(true);
+    expect(patientChecklistTasks.practiceId.notNull).toBe(true);
+    expect(SCHEMA).toMatch(/Not patient onboarding/);
+    expect(SCHEMA).toMatch(/Distinct from Practice Checklists/);
   });
 
   it("does not ship ChiroTouch parsers", () => {

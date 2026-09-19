@@ -58,6 +58,18 @@ export default function AppShell({ me, onLogout, children }: Props) {
             Patients
           </NavLink>
           <NavLink
+            href="/practice-checklists"
+            current={location === "/practice-checklists"}
+          >
+            Checklists
+          </NavLink>
+          <NavLink
+            href="/onboarding"
+            current={location === "/onboarding" || location.startsWith("/onboarding/")}
+          >
+            Onboarding
+          </NavLink>
+          <NavLink
             href="/treatments"
             current={location === "/treatments" || location === "/services"}
           >

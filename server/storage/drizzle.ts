@@ -6,6 +6,8 @@ import {
   decryptStoredDailyStat,
   decryptStoredGoal,
   decryptStoredPatient,
+  decryptStoredPatientChecklist,
+  decryptStoredPatientChecklistTask,
   encryptPhiString,
 } from "../crypto/fields";
 import { DuplicateDailyLogError } from "../daily-log/errors";
@@ -37,6 +39,26 @@ import type {
   TreatmentPatch,
   TreatmentWrite,
   UserPatch,
+  StoredPracticeChecklist,
+  PracticeChecklistWrite,
+  PracticeChecklistPatch,
+  StoredPracticeChecklistItem,
+  PracticeChecklistItemWrite,
+  PracticeChecklistItemPatch,
+  StoredPracticeChecklistCompletion,
+  PracticeChecklistCompletionWrite,
+  StoredChecklistTemplate,
+  ChecklistTemplateWrite,
+  ChecklistTemplatePatch,
+  StoredChecklistTemplateTask,
+  ChecklistTemplateTaskWrite,
+  ChecklistTemplateTaskPatch,
+  StoredPatientChecklist,
+  PatientChecklistWrite,
+  PatientChecklistPatch,
+  StoredPatientChecklistTask,
+  PatientChecklistTaskWrite,
+  PatientChecklistTaskPatch,
 } from "./types";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -205,6 +227,120 @@ function mapTreatmentRow(row: schema.Treatment): StoredTreatment {
   };
 }
 
+function mapPracticeChecklistRow(
+  row: schema.PracticeChecklist,
+): StoredPracticeChecklist {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    cadence: row.cadence,
+    active: row.active,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapPracticeChecklistItemRow(
+  row: schema.PracticeChecklistItem,
+): StoredPracticeChecklistItem {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    checklistId: row.checklistId,
+    title: row.title,
+    category: row.category,
+    sortOrder: row.sortOrder,
+    active: row.active,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapPracticeChecklistCompletionRow(
+  row: schema.PracticeChecklistCompletion,
+): StoredPracticeChecklistCompletion {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    itemId: row.itemId,
+    completedOn: row.completedOn,
+    completedBy: row.completedBy ?? null,
+    completed: row.completed,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapChecklistTemplateRow(
+  row: schema.ChecklistTemplate,
+): StoredChecklistTemplate {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    patientType: row.patientType,
+    active: row.active,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapChecklistTemplateTaskRow(
+  row: schema.ChecklistTemplateTask,
+): StoredChecklistTemplateTask {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    templateId: row.templateId,
+    title: row.title,
+    description: row.description ?? null,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapPatientChecklistRow(
+  row: schema.PatientChecklist,
+): StoredPatientChecklist {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    patientId: row.patientId,
+    templateId: row.templateId ?? null,
+    templateName: row.templateName,
+    status: row.status,
+    notes: row.notes ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapPatientChecklistTaskRow(
+  row: schema.PatientChecklistTask,
+): StoredPatientChecklistTask {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    patientChecklistId: row.patientChecklistId,
+    title: row.title,
+    done: row.done,
+    assigneeName: row.assigneeName ?? null,
+    notes: row.notes ?? null,
+    completedAt: row.completedAt ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export class DrizzleStorage implements AppStorage {
   private readonly phiEncryptionKey: string;
 
@@ -226,6 +362,24 @@ export class DrizzleStorage implements AppStorage {
 
   private revealGoal(row: schema.Goal): StoredGoal {
     return decryptStoredGoal(mapGoalRow(row), this.phiEncryptionKey);
+  }
+
+  private revealPatientChecklist(
+    row: schema.PatientChecklist,
+  ): StoredPatientChecklist {
+    return decryptStoredPatientChecklist(
+      mapPatientChecklistRow(row),
+      this.phiEncryptionKey,
+    );
+  }
+
+  private revealPatientChecklistTask(
+    row: schema.PatientChecklistTask,
+  ): StoredPatientChecklistTask {
+    return decryptStoredPatientChecklistTask(
+      mapPatientChecklistTaskRow(row),
+      this.phiEncryptionKey,
+    );
   }
 
   async createUser(input: {
@@ -1262,6 +1416,764 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning({ id: schema.treatments.id });
+    return deleted.length > 0;
+  }
+
+  async createPracticeChecklist(
+    scope: TenantScope,
+    input: PracticeChecklistWrite,
+  ): Promise<StoredPracticeChecklist> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.practiceChecklists)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        cadence: input.cadence,
+        active: input.active ?? true,
+      })
+      .returning();
+    return mapPracticeChecklistRow(row);
+  }
+
+  async getPracticeChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPracticeChecklist | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.practiceChecklists)
+      .where(
+        and(
+          eq(schema.practiceChecklists.id, id),
+          eq(schema.practiceChecklists.orgId, orgId),
+          eq(schema.practiceChecklists.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapPracticeChecklistRow(row) : undefined;
+  }
+
+  async listPracticeChecklists(
+    scope: TenantScope,
+  ): Promise<StoredPracticeChecklist[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.practiceChecklists)
+      .where(
+        and(
+          eq(schema.practiceChecklists.orgId, orgId),
+          eq(schema.practiceChecklists.practiceId, practiceId),
+        ),
+      )
+      .orderBy(schema.practiceChecklists.name);
+    return rows.map(mapPracticeChecklistRow);
+  }
+
+  async updatePracticeChecklist(
+    scope: TenantScope,
+    id: string,
+    input: PracticeChecklistPatch,
+  ): Promise<StoredPracticeChecklist | undefined> {
+    const existing = await this.getPracticeChecklist(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.practiceChecklists)
+      .set({
+        name: input.name ?? existing.name,
+        cadence: input.cadence ?? existing.cadence,
+        active: input.active ?? existing.active,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.practiceChecklists.id, id),
+          eq(schema.practiceChecklists.orgId, orgId),
+          eq(schema.practiceChecklists.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapPracticeChecklistRow(row) : undefined;
+  }
+
+  async deletePracticeChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.practiceChecklists)
+      .where(
+        and(
+          eq(schema.practiceChecklists.id, id),
+          eq(schema.practiceChecklists.orgId, orgId),
+          eq(schema.practiceChecklists.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.practiceChecklists.id });
+    return deleted.length > 0;
+  }
+
+  async createPracticeChecklistItem(
+    scope: TenantScope,
+    input: PracticeChecklistItemWrite,
+  ): Promise<StoredPracticeChecklistItem> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.practiceChecklistItems)
+      .values({
+        orgId,
+        practiceId,
+        checklistId: input.checklistId,
+        title: input.title,
+        category: input.category,
+        sortOrder: input.sortOrder ?? 0,
+        active: input.active ?? true,
+      })
+      .returning();
+    return mapPracticeChecklistItemRow(row);
+  }
+
+  async getPracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPracticeChecklistItem | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.practiceChecklistItems)
+      .where(
+        and(
+          eq(schema.practiceChecklistItems.id, id),
+          eq(schema.practiceChecklistItems.orgId, orgId),
+          eq(schema.practiceChecklistItems.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapPracticeChecklistItemRow(row) : undefined;
+  }
+
+  async listPracticeChecklistItems(
+    scope: TenantScope,
+    checklistId?: string,
+  ): Promise<StoredPracticeChecklistItem[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.practiceChecklistItems.orgId, orgId),
+      eq(schema.practiceChecklistItems.practiceId, practiceId),
+    ];
+    if (checklistId) {
+      filters.push(eq(schema.practiceChecklistItems.checklistId, checklistId));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.practiceChecklistItems)
+      .where(and(...filters))
+      .orderBy(
+        schema.practiceChecklistItems.sortOrder,
+        schema.practiceChecklistItems.title,
+      );
+    return rows.map(mapPracticeChecklistItemRow);
+  }
+
+  async updatePracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+    input: PracticeChecklistItemPatch,
+  ): Promise<StoredPracticeChecklistItem | undefined> {
+    const existing = await this.getPracticeChecklistItem(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.practiceChecklistItems)
+      .set({
+        title: input.title ?? existing.title,
+        category: input.category ?? existing.category,
+        sortOrder: input.sortOrder ?? existing.sortOrder,
+        active: input.active ?? existing.active,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.practiceChecklistItems.id, id),
+          eq(schema.practiceChecklistItems.orgId, orgId),
+          eq(schema.practiceChecklistItems.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapPracticeChecklistItemRow(row) : undefined;
+  }
+
+  async deletePracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.practiceChecklistItems)
+      .where(
+        and(
+          eq(schema.practiceChecklistItems.id, id),
+          eq(schema.practiceChecklistItems.orgId, orgId),
+          eq(schema.practiceChecklistItems.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.practiceChecklistItems.id });
+    return deleted.length > 0;
+  }
+
+  async getPracticeChecklistCompletion(
+    scope: TenantScope,
+    itemId: string,
+    completedOn: string,
+  ): Promise<StoredPracticeChecklistCompletion | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.practiceChecklistCompletions)
+      .where(
+        and(
+          eq(schema.practiceChecklistCompletions.itemId, itemId),
+          eq(schema.practiceChecklistCompletions.completedOn, completedOn),
+          eq(schema.practiceChecklistCompletions.orgId, orgId),
+          eq(schema.practiceChecklistCompletions.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapPracticeChecklistCompletionRow(row) : undefined;
+  }
+
+  async listPracticeChecklistCompletions(
+    scope: TenantScope,
+    range?: { from?: string; to?: string },
+  ): Promise<StoredPracticeChecklistCompletion[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.practiceChecklistCompletions.orgId, orgId),
+      eq(schema.practiceChecklistCompletions.practiceId, practiceId),
+    ];
+    if (range?.from) {
+      filters.push(
+        gte(schema.practiceChecklistCompletions.completedOn, range.from),
+      );
+    }
+    if (range?.to) {
+      filters.push(
+        lte(schema.practiceChecklistCompletions.completedOn, range.to),
+      );
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.practiceChecklistCompletions)
+      .where(and(...filters))
+      .orderBy(schema.practiceChecklistCompletions.completedOn);
+    return rows.map(mapPracticeChecklistCompletionRow);
+  }
+
+  async upsertPracticeChecklistCompletion(
+    scope: TenantScope,
+    input: PracticeChecklistCompletionWrite,
+  ): Promise<StoredPracticeChecklistCompletion> {
+    const existing = await this.getPracticeChecklistCompletion(
+      scope,
+      input.itemId,
+      input.completedOn,
+    );
+    const { orgId, practiceId } = requireTenantScope(scope);
+    if (existing) {
+      const [row] = await this.db
+        .update(schema.practiceChecklistCompletions)
+        .set({
+          completed: input.completed,
+          completedBy:
+            input.completedBy === undefined
+              ? existing.completedBy
+              : input.completedBy,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.practiceChecklistCompletions.id, existing.id),
+            eq(schema.practiceChecklistCompletions.orgId, orgId),
+            eq(schema.practiceChecklistCompletions.practiceId, practiceId),
+          ),
+        )
+        .returning();
+      return mapPracticeChecklistCompletionRow(row);
+    }
+    const [row] = await this.db
+      .insert(schema.practiceChecklistCompletions)
+      .values({
+        orgId,
+        practiceId,
+        itemId: input.itemId,
+        completedOn: input.completedOn,
+        completedBy: input.completedBy ?? null,
+        completed: input.completed,
+      })
+      .returning();
+    return mapPracticeChecklistCompletionRow(row);
+  }
+
+  async createChecklistTemplate(
+    scope: TenantScope,
+    input: ChecklistTemplateWrite,
+  ): Promise<StoredChecklistTemplate> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.checklistTemplates)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        patientType: input.patientType,
+        active: input.active ?? true,
+      })
+      .returning();
+    return mapChecklistTemplateRow(row);
+  }
+
+  async getChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredChecklistTemplate | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.checklistTemplates)
+      .where(
+        and(
+          eq(schema.checklistTemplates.id, id),
+          eq(schema.checklistTemplates.orgId, orgId),
+          eq(schema.checklistTemplates.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapChecklistTemplateRow(row) : undefined;
+  }
+
+  async listChecklistTemplates(
+    scope: TenantScope,
+  ): Promise<StoredChecklistTemplate[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.checklistTemplates)
+      .where(
+        and(
+          eq(schema.checklistTemplates.orgId, orgId),
+          eq(schema.checklistTemplates.practiceId, practiceId),
+        ),
+      )
+      .orderBy(schema.checklistTemplates.name);
+    return rows.map(mapChecklistTemplateRow);
+  }
+
+  async updateChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+    input: ChecklistTemplatePatch,
+  ): Promise<StoredChecklistTemplate | undefined> {
+    const existing = await this.getChecklistTemplate(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.checklistTemplates)
+      .set({
+        name: input.name ?? existing.name,
+        patientType: input.patientType ?? existing.patientType,
+        active: input.active ?? existing.active,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.checklistTemplates.id, id),
+          eq(schema.checklistTemplates.orgId, orgId),
+          eq(schema.checklistTemplates.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapChecklistTemplateRow(row) : undefined;
+  }
+
+  async deleteChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const assigned = await this.countPatientChecklistsForTemplate(scope, id);
+    if (assigned > 0) return false;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.checklistTemplates)
+      .where(
+        and(
+          eq(schema.checklistTemplates.id, id),
+          eq(schema.checklistTemplates.orgId, orgId),
+          eq(schema.checklistTemplates.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.checklistTemplates.id });
+    return deleted.length > 0;
+  }
+
+  async createChecklistTemplateTask(
+    scope: TenantScope,
+    input: ChecklistTemplateTaskWrite,
+  ): Promise<StoredChecklistTemplateTask> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.checklistTemplateTasks)
+      .values({
+        orgId,
+        practiceId,
+        templateId: input.templateId,
+        title: input.title,
+        description: input.description ?? null,
+        sortOrder: input.sortOrder ?? 0,
+      })
+      .returning();
+    return mapChecklistTemplateTaskRow(row);
+  }
+
+  async getChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredChecklistTemplateTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.checklistTemplateTasks)
+      .where(
+        and(
+          eq(schema.checklistTemplateTasks.id, id),
+          eq(schema.checklistTemplateTasks.orgId, orgId),
+          eq(schema.checklistTemplateTasks.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapChecklistTemplateTaskRow(row) : undefined;
+  }
+
+  async listChecklistTemplateTasks(
+    scope: TenantScope,
+    templateId?: string,
+  ): Promise<StoredChecklistTemplateTask[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.checklistTemplateTasks.orgId, orgId),
+      eq(schema.checklistTemplateTasks.practiceId, practiceId),
+    ];
+    if (templateId) {
+      filters.push(eq(schema.checklistTemplateTasks.templateId, templateId));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.checklistTemplateTasks)
+      .where(and(...filters))
+      .orderBy(
+        schema.checklistTemplateTasks.sortOrder,
+        schema.checklistTemplateTasks.title,
+      );
+    return rows.map(mapChecklistTemplateTaskRow);
+  }
+
+  async updateChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+    input: ChecklistTemplateTaskPatch,
+  ): Promise<StoredChecklistTemplateTask | undefined> {
+    const existing = await this.getChecklistTemplateTask(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.checklistTemplateTasks)
+      .set({
+        title: input.title ?? existing.title,
+        description:
+          input.description === undefined
+            ? existing.description
+            : input.description,
+        sortOrder: input.sortOrder ?? existing.sortOrder,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.checklistTemplateTasks.id, id),
+          eq(schema.checklistTemplateTasks.orgId, orgId),
+          eq(schema.checklistTemplateTasks.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapChecklistTemplateTaskRow(row) : undefined;
+  }
+
+  async deleteChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.checklistTemplateTasks)
+      .where(
+        and(
+          eq(schema.checklistTemplateTasks.id, id),
+          eq(schema.checklistTemplateTasks.orgId, orgId),
+          eq(schema.checklistTemplateTasks.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.checklistTemplateTasks.id });
+    return deleted.length > 0;
+  }
+
+  async createPatientChecklist(
+    scope: TenantScope,
+    input: PatientChecklistWrite,
+  ): Promise<StoredPatientChecklist> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.patientChecklists)
+      .values({
+        orgId,
+        practiceId,
+        patientId: input.patientId,
+        templateId: input.templateId ?? null,
+        templateName: input.templateName,
+        status: input.status ?? "not_started",
+        notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+      })
+      .returning();
+    return this.revealPatientChecklist(row);
+  }
+
+  async getPatientChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPatientChecklist | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.patientChecklists)
+      .where(
+        and(
+          eq(schema.patientChecklists.id, id),
+          eq(schema.patientChecklists.orgId, orgId),
+          eq(schema.patientChecklists.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? this.revealPatientChecklist(row) : undefined;
+  }
+
+  async listPatientChecklists(
+    scope: TenantScope,
+    patientId?: string,
+  ): Promise<StoredPatientChecklist[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.patientChecklists.orgId, orgId),
+      eq(schema.patientChecklists.practiceId, practiceId),
+    ];
+    if (patientId) {
+      filters.push(eq(schema.patientChecklists.patientId, patientId));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.patientChecklists)
+      .where(and(...filters))
+      .orderBy(desc(schema.patientChecklists.createdAt));
+    return rows.map((row) => this.revealPatientChecklist(row));
+  }
+
+  async updatePatientChecklist(
+    scope: TenantScope,
+    id: string,
+    input: PatientChecklistPatch,
+  ): Promise<StoredPatientChecklist | undefined> {
+    const existing = await this.getPatientChecklist(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.patientChecklists)
+      .set({
+        templateId:
+          input.templateId === undefined ? existing.templateId : input.templateId,
+        templateName: input.templateName ?? existing.templateName,
+        status: input.status ?? existing.status,
+        notes:
+          input.notes === undefined
+            ? undefined
+            : encryptPhiString(input.notes, this.phiEncryptionKey),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.patientChecklists.id, id),
+          eq(schema.patientChecklists.orgId, orgId),
+          eq(schema.patientChecklists.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? this.revealPatientChecklist(row) : undefined;
+  }
+
+  async deletePatientChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.patientChecklists)
+      .where(
+        and(
+          eq(schema.patientChecklists.id, id),
+          eq(schema.patientChecklists.orgId, orgId),
+          eq(schema.patientChecklists.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.patientChecklists.id });
+    return deleted.length > 0;
+  }
+
+  async countPatientChecklistsForTemplate(
+    scope: TenantScope,
+    templateId: string,
+  ): Promise<number> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(schema.patientChecklists)
+      .where(
+        and(
+          eq(schema.patientChecklists.templateId, templateId),
+          eq(schema.patientChecklists.orgId, orgId),
+          eq(schema.patientChecklists.practiceId, practiceId),
+        ),
+      );
+    return Number(row?.value ?? 0);
+  }
+
+  async createPatientChecklistTask(
+    scope: TenantScope,
+    input: PatientChecklistTaskWrite,
+  ): Promise<StoredPatientChecklistTask> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.patientChecklistTasks)
+      .values({
+        orgId,
+        practiceId,
+        patientChecklistId: input.patientChecklistId,
+        title: input.title,
+        done: input.done ?? false,
+        assigneeName: input.assigneeName ?? null,
+        notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+        completedAt: input.completedAt ?? null,
+      })
+      .returning();
+    return this.revealPatientChecklistTask(row);
+  }
+
+  async getPatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPatientChecklistTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.patientChecklistTasks)
+      .where(
+        and(
+          eq(schema.patientChecklistTasks.id, id),
+          eq(schema.patientChecklistTasks.orgId, orgId),
+          eq(schema.patientChecklistTasks.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? this.revealPatientChecklistTask(row) : undefined;
+  }
+
+  async listPatientChecklistTasks(
+    scope: TenantScope,
+    patientChecklistId?: string,
+  ): Promise<StoredPatientChecklistTask[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.patientChecklistTasks.orgId, orgId),
+      eq(schema.patientChecklistTasks.practiceId, practiceId),
+    ];
+    if (patientChecklistId) {
+      filters.push(
+        eq(schema.patientChecklistTasks.patientChecklistId, patientChecklistId),
+      );
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.patientChecklistTasks)
+      .where(and(...filters))
+      .orderBy(
+        schema.patientChecklistTasks.patientChecklistId,
+        schema.patientChecklistTasks.createdAt,
+      );
+    return rows.map((row) => this.revealPatientChecklistTask(row));
+  }
+
+  async updatePatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+    input: PatientChecklistTaskPatch,
+  ): Promise<StoredPatientChecklistTask | undefined> {
+    const existing = await this.getPatientChecklistTask(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.patientChecklistTasks)
+      .set({
+        title: input.title ?? existing.title,
+        done: input.done ?? existing.done,
+        assigneeName:
+          input.assigneeName === undefined
+            ? existing.assigneeName
+            : input.assigneeName,
+        notes:
+          input.notes === undefined
+            ? undefined
+            : encryptPhiString(input.notes, this.phiEncryptionKey),
+        completedAt:
+          input.completedAt === undefined
+            ? existing.completedAt
+            : input.completedAt,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.patientChecklistTasks.id, id),
+          eq(schema.patientChecklistTasks.orgId, orgId),
+          eq(schema.patientChecklistTasks.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? this.revealPatientChecklistTask(row) : undefined;
+  }
+
+  async deletePatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.patientChecklistTasks)
+      .where(
+        and(
+          eq(schema.patientChecklistTasks.id, id),
+          eq(schema.patientChecklistTasks.orgId, orgId),
+          eq(schema.patientChecklistTasks.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.patientChecklistTasks.id });
     return deleted.length > 0;
   }
 

@@ -3,6 +3,8 @@ import {
   decryptStoredDailyStat,
   decryptStoredGoal,
   decryptStoredPatient,
+  decryptStoredPatientChecklist,
+  decryptStoredPatientChecklistTask,
   encryptPhiString,
 } from "../crypto/fields";
 import { DuplicateDailyLogError } from "../daily-log/errors";
@@ -35,6 +37,26 @@ import type {
   TreatmentPatch,
   TreatmentWrite,
   UserPatch,
+  StoredPracticeChecklist,
+  PracticeChecklistWrite,
+  PracticeChecklistPatch,
+  StoredPracticeChecklistItem,
+  PracticeChecklistItemWrite,
+  PracticeChecklistItemPatch,
+  StoredPracticeChecklistCompletion,
+  PracticeChecklistCompletionWrite,
+  StoredChecklistTemplate,
+  ChecklistTemplateWrite,
+  ChecklistTemplatePatch,
+  StoredChecklistTemplateTask,
+  ChecklistTemplateTaskWrite,
+  ChecklistTemplateTaskPatch,
+  StoredPatientChecklist,
+  PatientChecklistWrite,
+  PatientChecklistPatch,
+  StoredPatientChecklistTask,
+  PatientChecklistTaskWrite,
+  PatientChecklistTaskPatch,
 } from "./types";
 import type { MembershipRole } from "@shared/roles";
 
@@ -56,6 +78,15 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   goals: StoredGoal[] = [];
   treatments: StoredTreatment[] = [];
+  practiceChecklists: StoredPracticeChecklist[] = [];
+  practiceChecklistItems: StoredPracticeChecklistItem[] = [];
+  practiceChecklistCompletions: StoredPracticeChecklistCompletion[] = [];
+  checklistTemplates: StoredChecklistTemplate[] = [];
+  checklistTemplateTasks: StoredChecklistTemplateTask[] = [];
+  /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  patientChecklists: StoredPatientChecklist[] = [];
+  /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  patientChecklistTasks: StoredPatientChecklistTask[] = [];
   auditLogs: StoredAuditLog[] = [];
   passwordResetTokens: StoredPasswordResetToken[] = [];
   invitations: StoredInvitation[] = [];
@@ -470,6 +501,20 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
       (p) => p.id === id && p.orgId === orgId && p.practiceId === practiceId,
     );
     if (index === -1) return false;
+    const checklistIds = this.patientChecklists
+      .filter(
+        (row) =>
+          row.patientId === id &&
+          row.orgId === orgId &&
+          row.practiceId === practiceId,
+      )
+      .map((row) => row.id);
+    this.patientChecklistTasks = this.patientChecklistTasks.filter(
+      (row) => !checklistIds.includes(row.patientChecklistId),
+    );
+    this.patientChecklists = this.patientChecklists.filter(
+      (row) => !checklistIds.includes(row.id),
+    );
     this.patients.splice(index, 1);
     return true;
   }
@@ -817,6 +862,634 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     );
     if (index === -1) return false;
     this.treatments.splice(index, 1);
+    return true;
+  }
+
+  async createPracticeChecklist(
+    scope: TenantScope,
+    input: PracticeChecklistWrite,
+  ): Promise<StoredPracticeChecklist> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredPracticeChecklist = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      name: input.name,
+      cadence: input.cadence,
+      active: input.active ?? true,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.practiceChecklists.push(row);
+    return { ...row };
+  }
+
+  async getPracticeChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPracticeChecklist | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.practiceChecklists.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listPracticeChecklists(
+    scope: TenantScope,
+  ): Promise<StoredPracticeChecklist[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.practiceChecklists
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((row) => ({ ...row }));
+  }
+
+  listPracticeChecklistsMissingPracticeFilter(
+    orgId: string,
+  ): StoredPracticeChecklist[] {
+    return this.practiceChecklists.filter((row) => row.orgId === orgId);
+  }
+
+  async updatePracticeChecklist(
+    scope: TenantScope,
+    id: string,
+    input: PracticeChecklistPatch,
+  ): Promise<StoredPracticeChecklist | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.practiceChecklists.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.name !== undefined) existing.name = input.name;
+    if (input.cadence !== undefined) existing.cadence = input.cadence;
+    if (input.active !== undefined) existing.active = input.active;
+    existing.updatedAt = now();
+    return { ...existing };
+  }
+
+  async deletePracticeChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.practiceChecklists.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    const itemIds = this.practiceChecklistItems
+      .filter((row) => row.checklistId === id)
+      .map((row) => row.id);
+    this.practiceChecklistCompletions = this.practiceChecklistCompletions.filter(
+      (row) => !itemIds.includes(row.itemId),
+    );
+    this.practiceChecklistItems = this.practiceChecklistItems.filter(
+      (row) => row.checklistId !== id,
+    );
+    this.practiceChecklists.splice(index, 1);
+    return true;
+  }
+
+  async createPracticeChecklistItem(
+    scope: TenantScope,
+    input: PracticeChecklistItemWrite,
+  ): Promise<StoredPracticeChecklistItem> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredPracticeChecklistItem = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      checklistId: input.checklistId,
+      title: input.title,
+      category: input.category,
+      sortOrder: input.sortOrder ?? 0,
+      active: input.active ?? true,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.practiceChecklistItems.push(row);
+    return { ...row };
+  }
+
+  async getPracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPracticeChecklistItem | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.practiceChecklistItems.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listPracticeChecklistItems(
+    scope: TenantScope,
+    checklistId?: string,
+  ): Promise<StoredPracticeChecklistItem[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.practiceChecklistItems
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (checklistId ? row.checklistId === checklistId : true),
+      )
+      .slice()
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.title.localeCompare(b.title);
+      })
+      .map((row) => ({ ...row }));
+  }
+
+  async updatePracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+    input: PracticeChecklistItemPatch,
+  ): Promise<StoredPracticeChecklistItem | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.practiceChecklistItems.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.title !== undefined) existing.title = input.title;
+    if (input.category !== undefined) existing.category = input.category;
+    if (input.sortOrder !== undefined) existing.sortOrder = input.sortOrder;
+    if (input.active !== undefined) existing.active = input.active;
+    existing.updatedAt = now();
+    return { ...existing };
+  }
+
+  async deletePracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.practiceChecklistItems.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.practiceChecklistCompletions = this.practiceChecklistCompletions.filter(
+      (row) => row.itemId !== id,
+    );
+    this.practiceChecklistItems.splice(index, 1);
+    return true;
+  }
+
+  async getPracticeChecklistCompletion(
+    scope: TenantScope,
+    itemId: string,
+    completedOn: string,
+  ): Promise<StoredPracticeChecklistCompletion | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.practiceChecklistCompletions.find(
+      (item) =>
+        item.itemId === itemId &&
+        item.completedOn === completedOn &&
+        item.orgId === orgId &&
+        item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listPracticeChecklistCompletions(
+    scope: TenantScope,
+    range?: { from?: string; to?: string },
+  ): Promise<StoredPracticeChecklistCompletion[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.practiceChecklistCompletions
+      .filter((row) => {
+        if (row.orgId !== orgId || row.practiceId !== practiceId) return false;
+        if (range?.from && row.completedOn < range.from) return false;
+        if (range?.to && row.completedOn > range.to) return false;
+        return true;
+      })
+      .slice()
+      .sort((a, b) => a.completedOn.localeCompare(b.completedOn))
+      .map((row) => ({ ...row }));
+  }
+
+  async upsertPracticeChecklistCompletion(
+    scope: TenantScope,
+    input: PracticeChecklistCompletionWrite,
+  ): Promise<StoredPracticeChecklistCompletion> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.practiceChecklistCompletions.find(
+      (row) =>
+        row.itemId === input.itemId &&
+        row.completedOn === input.completedOn &&
+        row.orgId === orgId &&
+        row.practiceId === practiceId,
+    );
+    if (existing) {
+      existing.completed = input.completed;
+      if (input.completedBy !== undefined) {
+        existing.completedBy = input.completedBy;
+      }
+      existing.updatedAt = now();
+      return { ...existing };
+    }
+    const row: StoredPracticeChecklistCompletion = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      itemId: input.itemId,
+      completedOn: input.completedOn,
+      completedBy: input.completedBy ?? null,
+      completed: input.completed,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.practiceChecklistCompletions.push(row);
+    return { ...row };
+  }
+
+  async createChecklistTemplate(
+    scope: TenantScope,
+    input: ChecklistTemplateWrite,
+  ): Promise<StoredChecklistTemplate> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredChecklistTemplate = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      name: input.name,
+      patientType: input.patientType,
+      active: input.active ?? true,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.checklistTemplates.push(row);
+    return { ...row };
+  }
+
+  async getChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredChecklistTemplate | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.checklistTemplates.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listChecklistTemplates(
+    scope: TenantScope,
+  ): Promise<StoredChecklistTemplate[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.checklistTemplates
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((row) => ({ ...row }));
+  }
+
+  listChecklistTemplatesMissingPracticeFilter(
+    orgId: string,
+  ): StoredChecklistTemplate[] {
+    return this.checklistTemplates.filter((row) => row.orgId === orgId);
+  }
+
+  async updateChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+    input: ChecklistTemplatePatch,
+  ): Promise<StoredChecklistTemplate | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.checklistTemplates.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.name !== undefined) existing.name = input.name;
+    if (input.patientType !== undefined) existing.patientType = input.patientType;
+    if (input.active !== undefined) existing.active = input.active;
+    existing.updatedAt = now();
+    return { ...existing };
+  }
+
+  async deleteChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const assigned = this.patientChecklists.some(
+      (row) =>
+        row.templateId === id &&
+        row.orgId === orgId &&
+        row.practiceId === practiceId,
+    );
+    if (assigned) return false;
+    const index = this.checklistTemplates.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.checklistTemplateTasks = this.checklistTemplateTasks.filter(
+      (row) => row.templateId !== id,
+    );
+    this.checklistTemplates.splice(index, 1);
+    return true;
+  }
+
+  async createChecklistTemplateTask(
+    scope: TenantScope,
+    input: ChecklistTemplateTaskWrite,
+  ): Promise<StoredChecklistTemplateTask> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredChecklistTemplateTask = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      templateId: input.templateId,
+      title: input.title,
+      description: input.description ?? null,
+      sortOrder: input.sortOrder ?? 0,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.checklistTemplateTasks.push(row);
+    return { ...row };
+  }
+
+  async getChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredChecklistTemplateTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.checklistTemplateTasks.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async listChecklistTemplateTasks(
+    scope: TenantScope,
+    templateId?: string,
+  ): Promise<StoredChecklistTemplateTask[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.checklistTemplateTasks
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (templateId ? row.templateId === templateId : true),
+      )
+      .slice()
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.title.localeCompare(b.title);
+      })
+      .map((row) => ({ ...row }));
+  }
+
+  async updateChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+    input: ChecklistTemplateTaskPatch,
+  ): Promise<StoredChecklistTemplateTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.checklistTemplateTasks.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.title !== undefined) existing.title = input.title;
+    if (input.description !== undefined) existing.description = input.description;
+    if (input.sortOrder !== undefined) existing.sortOrder = input.sortOrder;
+    existing.updatedAt = now();
+    return { ...existing };
+  }
+
+  async deleteChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.checklistTemplateTasks.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.checklistTemplateTasks.splice(index, 1);
+    return true;
+  }
+
+  async createPatientChecklist(
+    scope: TenantScope,
+    input: PatientChecklistWrite,
+  ): Promise<StoredPatientChecklist> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredPatientChecklist = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      patientId: input.patientId,
+      templateId: input.templateId ?? null,
+      templateName: input.templateName,
+      status: input.status ?? "not_started",
+      notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.patientChecklists.push(row);
+    return decryptStoredPatientChecklist(row, this.phiEncryptionKey);
+  }
+
+  async getPatientChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPatientChecklist | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.patientChecklists.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row
+      ? decryptStoredPatientChecklist(row, this.phiEncryptionKey)
+      : undefined;
+  }
+
+  async listPatientChecklists(
+    scope: TenantScope,
+    patientId?: string,
+  ): Promise<StoredPatientChecklist[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.patientChecklists
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (patientId ? row.patientId === patientId : true),
+      )
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((row) => decryptStoredPatientChecklist(row, this.phiEncryptionKey));
+  }
+
+  listPatientChecklistsMissingPracticeFilter(
+    orgId: string,
+  ): StoredPatientChecklist[] {
+    return this.patientChecklists
+      .filter((row) => row.orgId === orgId)
+      .map((row) => decryptStoredPatientChecklist(row, this.phiEncryptionKey));
+  }
+
+  async updatePatientChecklist(
+    scope: TenantScope,
+    id: string,
+    input: PatientChecklistPatch,
+  ): Promise<StoredPatientChecklist | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.patientChecklists.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.templateId !== undefined) existing.templateId = input.templateId;
+    if (input.templateName !== undefined) existing.templateName = input.templateName;
+    if (input.status !== undefined) existing.status = input.status;
+    if (input.notes !== undefined) {
+      existing.notes = encryptPhiString(input.notes, this.phiEncryptionKey);
+    }
+    existing.updatedAt = now();
+    return decryptStoredPatientChecklist(existing, this.phiEncryptionKey);
+  }
+
+  async deletePatientChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.patientChecklists.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.patientChecklistTasks = this.patientChecklistTasks.filter(
+      (row) => row.patientChecklistId !== id,
+    );
+    this.patientChecklists.splice(index, 1);
+    return true;
+  }
+
+  async countPatientChecklistsForTemplate(
+    scope: TenantScope,
+    templateId: string,
+  ): Promise<number> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.patientChecklists.filter(
+      (row) =>
+        row.templateId === templateId &&
+        row.orgId === orgId &&
+        row.practiceId === practiceId,
+    ).length;
+  }
+
+  async createPatientChecklistTask(
+    scope: TenantScope,
+    input: PatientChecklistTaskWrite,
+  ): Promise<StoredPatientChecklistTask> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredPatientChecklistTask = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      patientChecklistId: input.patientChecklistId,
+      title: input.title,
+      done: input.done ?? false,
+      assigneeName: input.assigneeName ?? null,
+      notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+      completedAt: input.completedAt ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.patientChecklistTasks.push(row);
+    return decryptStoredPatientChecklistTask(row, this.phiEncryptionKey);
+  }
+
+  async getPatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPatientChecklistTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.patientChecklistTasks.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row
+      ? decryptStoredPatientChecklistTask(row, this.phiEncryptionKey)
+      : undefined;
+  }
+
+  async listPatientChecklistTasks(
+    scope: TenantScope,
+    patientChecklistId?: string,
+  ): Promise<StoredPatientChecklistTask[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.patientChecklistTasks
+      .filter(
+        (row) =>
+          row.orgId === orgId &&
+          row.practiceId === practiceId &&
+          (patientChecklistId
+            ? row.patientChecklistId === patientChecklistId
+            : true),
+      )
+      .slice()
+      .sort((a, b) => {
+        const byParent = a.patientChecklistId.localeCompare(b.patientChecklistId);
+        if (byParent !== 0) return byParent;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      })
+      .map((row) =>
+        decryptStoredPatientChecklistTask(row, this.phiEncryptionKey),
+      );
+  }
+
+  async updatePatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+    input: PatientChecklistTaskPatch,
+  ): Promise<StoredPatientChecklistTask | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.patientChecklistTasks.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.title !== undefined) existing.title = input.title;
+    if (input.done !== undefined) existing.done = input.done;
+    if (input.assigneeName !== undefined) existing.assigneeName = input.assigneeName;
+    if (input.notes !== undefined) {
+      existing.notes = encryptPhiString(input.notes, this.phiEncryptionKey);
+    }
+    if (input.completedAt !== undefined) existing.completedAt = input.completedAt;
+    existing.updatedAt = now();
+    return decryptStoredPatientChecklistTask(existing, this.phiEncryptionKey);
+  }
+
+  async deletePatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.patientChecklistTasks.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.patientChecklistTasks.splice(index, 1);
     return true;
   }
 

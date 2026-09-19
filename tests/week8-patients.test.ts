@@ -60,7 +60,8 @@ describe("Patient conversion funnel APIs", () => {
     expect(created.body.patient.patientType).toBe("new");
     expect(created.body.patient.referralSource).toBe("Google");
     expect(created.body.patient.converted).toBe(false);
-    expect(created.body.patient.onboarding.available).toBe(false);
+    expect(created.body.patient.onboarding.available).toBe(true);
+    expect(created.body.patient.onboarding.assigned).toBe(false);
 
     const listed = await a.agent.get("/api/patients?type=new&month=2026-09");
     expect(listed.status).toBe(200);

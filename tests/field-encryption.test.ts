@@ -120,3 +120,34 @@ describe("patient storage ciphertext", () => {
     expect(row.notes).toBe("lumbar notes");
   });
 });
+
+describe("patient onboarding notes ciphertext", () => {
+  it("encrypts checklist and task notes at rest", async () => {
+    const store = createMemoryStorage({ phiEncryptionKey: KEY });
+    const org = await store.createOrganization({ name: "Org" });
+    const practice = await store.createPractice({ orgId: org.id, name: "Clinic" });
+    const scope = { orgId: org.id, practiceId: practice.id };
+    const patient = await store.createPatient(scope, { name: "Alice Patient" });
+    const checklist = await store.createPatientChecklist(scope, {
+      patientId: patient.id,
+      templateName: "Day-1",
+      notes: "Prefers mornings",
+    });
+    expect(checklist.notes).toBe("Prefers mornings");
+    expect(store.patientChecklists[0].notes).toMatch(/^v1:/);
+    expect(JSON.stringify(store.patientChecklists[0])).not.toContain(
+      "Prefers mornings",
+    );
+
+    const task = await store.createPatientChecklistTask(scope, {
+      patientChecklistId: checklist.id,
+      title: "Intake",
+      notes: "Left-side preference",
+    });
+    expect(task.notes).toBe("Left-side preference");
+    expect(store.patientChecklistTasks[0].notes).toMatch(/^v1:/);
+    expect(JSON.stringify(store.patientChecklistTasks[0])).not.toContain(
+      "Left-side preference",
+    );
+  });
+});

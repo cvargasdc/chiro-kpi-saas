@@ -276,6 +276,133 @@ describe("Practice A cannot read Practice B goals", () => {
   });
 });
 
+describe("Practice A cannot read Practice B practice checklists", () => {
+  it("listPracticeChecklists stays practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+
+    await store.createPracticeChecklist(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      { name: "A opening", cadence: "daily" },
+    );
+    await store.createPracticeChecklist(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      { name: "B opening", cadence: "daily" },
+    );
+    await store.createPracticeChecklist(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      { name: "A2 closing", cadence: "weekly" },
+    );
+
+    const listA = await store.listPracticeChecklists({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listA).toHaveLength(1);
+    expect(listA[0].name).toBe("A opening");
+
+    const unscoped = store.listPracticeChecklistsMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listPracticeChecklists({ orgId: orgA.id } as {
+        orgId: string;
+        practiceId: string;
+      }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});
+
+describe("Practice A cannot read Practice B onboarding", () => {
+  it("templates and patient checklists stay practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+
+    const patientA = await store.createPatient(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      { name: "Alice" },
+    );
+    const patientB = await store.createPatient(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      { name: "Bob" },
+    );
+    await store.createPatient(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      { name: "A2 patient" },
+    );
+
+    const tA = await store.createChecklistTemplate(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      { name: "A template", patientType: "all" },
+    );
+    await store.createChecklistTemplate(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      { name: "B template", patientType: "all" },
+    );
+    await store.createChecklistTemplate(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      { name: "A2 template", patientType: "new" },
+    );
+
+    await store.createPatientChecklist(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      {
+        patientId: patientA.id,
+        templateId: tA.id,
+        templateName: "A template",
+      },
+    );
+    await store.createPatientChecklist(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      {
+        patientId: patientB.id,
+        templateName: "B template",
+      },
+    );
+
+    const templatesA = await store.listChecklistTemplates({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(templatesA.map((t) => t.name)).toEqual(["A template"]);
+
+    const listsA = await store.listPatientChecklists({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listsA).toHaveLength(1);
+    expect(listsA[0].patientId).toBe(patientA.id);
+
+    expect(store.listChecklistTemplatesMissingPracticeFilter(orgA.id)).toHaveLength(
+      2,
+    );
+    expect(store.listPatientChecklistsMissingPracticeFilter(orgA.id).length).toBe(
+      1,
+    );
+
+    await expect(
+      store.listPatientChecklists({ orgId: orgA.id } as {
+        orgId: string;
+        practiceId: string;
+      }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});
+
 describe("Practice A cannot read Practice B treatments", () => {
   it("listTreatments and getTreatment stay practice-scoped", async () => {
     const store = createMemoryStorage();

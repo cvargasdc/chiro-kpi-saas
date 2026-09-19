@@ -345,12 +345,33 @@ export default function PatientDetailPage({ me, patientId, onLogout }: Props) {
             </p>
           </section>
 
-          <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 space-y-1">
-            <h3 className="font-semibold">Onboarding</h3>
-            <p className="text-sm text-ink-500">
-              {patient?.onboarding.reason ??
-                "Checklists and onboarding flows land in a later chunk."}
-            </p>
+          <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold">Onboarding</h3>
+              <Link
+                href={`/onboarding?patientId=${patientId}`}
+                className="text-sm text-accent-600 font-medium"
+              >
+                {patient?.onboarding.assigned
+                  ? "View onboarding"
+                  : "Assign onboarding"}
+              </Link>
+            </div>
+            {patient?.onboarding.assigned ? (
+              <ul className="text-sm space-y-1">
+                {patient.onboarding.checklists.map((row) => (
+                  <li key={row.id}>
+                    {row.templateName} · {row.status} · {row.doneCount}/
+                    {row.totalCount}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-ink-500">
+                {patient?.onboarding.reason ??
+                  "No onboarding checklist assigned yet."}
+              </p>
+            )}
           </section>
 
           {canWrite ? (

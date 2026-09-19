@@ -9,6 +9,7 @@ import {
   requireRole,
 } from "../auth/middleware";
 import type { HttpContext } from "../http-context";
+import { summarizeOnboardingProgress } from "@shared/onboarding";
 import { buildDashboardSnapshot } from "./compute";
 
 const PERIOD_KEYS: PeriodKey[] = ["this_week", "this_month", "custom"];
@@ -48,13 +49,14 @@ export function registerDashboardRoutes(app: Express, ctx: HttpContext): void {
 
       const tenant = req.tenant!;
       const scope = { orgId: tenant.orgId, practiceId: tenant.practiceId };
-      const [current, previous, patients] = await Promise.all([
+      const [current, previous, patients, patientChecklists] = await Promise.all([
         storage.listDailyStats(scope, { from: window.from, to: window.to }),
         storage.listDailyStats(scope, {
           from: window.previousFrom,
           to: window.previousTo,
         }),
         storage.listPatients(scope),
+        storage.listPatientChecklists(scope),
       ]);
 
       const snapshot = buildDashboardSnapshot({
@@ -64,6 +66,7 @@ export function registerDashboardRoutes(app: Express, ctx: HttpContext): void {
         previous,
         patients,
       });
+      const onboarding = summarizeOnboardingProgress(patientChecklists);
 
       await logAudit(storage, {
         orgId: tenant.orgId,
@@ -78,7 +81,7 @@ export function registerDashboardRoutes(app: Express, ctx: HttpContext): void {
         ipAddress: getClientIp(req),
       });
 
-      res.json(snapshot);
+      res.json({ ...snapshot, onboarding });
     },
   );
 }

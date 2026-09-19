@@ -248,6 +248,35 @@ export default function DashboardPage({ me, onLogout }: Props) {
 
         <GoalsSummary goals={goals} />
 
+        {kpis?.onboarding ? (
+          <section className="bg-white shadow-card rounded-2xl p-6 space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Patient onboarding</h2>
+              <Link href="/onboarding" className="text-sm text-accent-600 font-medium">
+                Open onboarding
+              </Link>
+            </div>
+            {kpis.onboarding.emptyState === "no_assignments" ? (
+              <p className="text-sm text-ink-500">
+                No onboarding checklists assigned. Incomplete count is 0 — not a
+                hidden backlog.
+              </p>
+            ) : kpis.onboarding.emptyState === "all_complete" ? (
+              <p className="text-sm text-ink-500">
+                All {kpis.onboarding.assignedCount} assigned onboarding
+                checklists are complete.
+              </p>
+            ) : (
+              <p className="text-sm">
+                <span className="font-semibold">
+                  {kpis.onboarding.incompleteCount}
+                </span>{" "}
+                incomplete of {kpis.onboarding.assignedCount} assigned.
+              </p>
+            )}
+          </section>
+        ) : null}
+
         <BillingCard
           billing={billing}
           error={billingError}

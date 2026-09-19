@@ -1,4 +1,7 @@
-import { ONBOARDING_UNAVAILABLE } from "@shared/patients";
+import {
+  UNOBSERVED_ONBOARDING,
+  type PatientOnboardingState,
+} from "@shared/onboarding";
 import type { StoredPatient, StoredReferralSource } from "../storage/types";
 
 export type PublicPatient = {
@@ -25,10 +28,13 @@ export type PublicPatient = {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
-  onboarding: typeof ONBOARDING_UNAVAILABLE;
+  onboarding: PatientOnboardingState;
 };
 
-export function publicPatient(row: StoredPatient): PublicPatient {
+export function publicPatient(
+  row: StoredPatient,
+  onboarding: PatientOnboardingState = UNOBSERVED_ONBOARDING,
+): PublicPatient {
   return {
     id: row.id,
     orgId: row.orgId,
@@ -53,7 +59,7 @@ export function publicPatient(row: StoredPatient): PublicPatient {
     createdBy: row.createdBy,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    onboarding: ONBOARDING_UNAVAILABLE,
+    onboarding,
   };
 }
 

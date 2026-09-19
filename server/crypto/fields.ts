@@ -4,6 +4,8 @@ import type {
   StoredDailyStat,
   StoredGoal,
   StoredPatient,
+  StoredPatientChecklist,
+  StoredPatientChecklistTask,
 } from "../storage/types";
 
 /**
@@ -89,6 +91,26 @@ export function decryptStoredDailyStat(
 }
 
 export function decryptStoredGoal(row: StoredGoal, key: string): StoredGoal {
+  return {
+    ...row,
+    notes: decryptPhiString(row.notes, key),
+  };
+}
+
+export function decryptStoredPatientChecklist(
+  row: StoredPatientChecklist,
+  key: string,
+): StoredPatientChecklist {
+  return {
+    ...row,
+    notes: decryptPhiString(row.notes, key),
+  };
+}
+
+export function decryptStoredPatientChecklistTask(
+  row: StoredPatientChecklistTask,
+  key: string,
+): StoredPatientChecklistTask {
   return {
     ...row,
     notes: decryptPhiString(row.notes, key),

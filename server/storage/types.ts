@@ -242,6 +242,183 @@ export type TreatmentPatch = Partial<{
   sortOrder: number;
 }>;
 
+export type StoredPracticeChecklist = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  cadence: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PracticeChecklistWrite = {
+  name: string;
+  cadence: string;
+  active?: boolean;
+};
+
+export type PracticeChecklistPatch = Partial<{
+  name: string;
+  cadence: string;
+  active: boolean;
+}>;
+
+export type StoredPracticeChecklistItem = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  checklistId: string;
+  title: string;
+  category: string;
+  sortOrder: number;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PracticeChecklistItemWrite = {
+  checklistId: string;
+  title: string;
+  category: string;
+  sortOrder?: number;
+  active?: boolean;
+};
+
+export type PracticeChecklistItemPatch = Partial<{
+  title: string;
+  category: string;
+  sortOrder: number;
+  active: boolean;
+}>;
+
+export type StoredPracticeChecklistCompletion = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  itemId: string;
+  completedOn: string;
+  completedBy: string | null;
+  completed: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PracticeChecklistCompletionWrite = {
+  itemId: string;
+  completedOn: string;
+  completed: boolean;
+  completedBy?: string | null;
+};
+
+export type StoredChecklistTemplate = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  patientType: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ChecklistTemplateWrite = {
+  name: string;
+  patientType: string;
+  active?: boolean;
+};
+
+export type ChecklistTemplatePatch = Partial<{
+  name: string;
+  patientType: string;
+  active: boolean;
+}>;
+
+export type StoredChecklistTemplateTask = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  templateId: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ChecklistTemplateTaskWrite = {
+  templateId: string;
+  title: string;
+  description?: string | null;
+  sortOrder?: number;
+};
+
+export type ChecklistTemplateTaskPatch = Partial<{
+  title: string;
+  description: string | null;
+  sortOrder: number;
+}>;
+
+export type StoredPatientChecklist = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  patientId: string;
+  templateId: string | null;
+  templateName: string;
+  status: string;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PatientChecklistWrite = {
+  patientId: string;
+  templateId?: string | null;
+  templateName: string;
+  status?: string;
+  notes?: string | null;
+};
+
+export type PatientChecklistPatch = Partial<{
+  templateId: string | null;
+  templateName: string;
+  status: string;
+  notes: string | null;
+}>;
+
+export type StoredPatientChecklistTask = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  patientChecklistId: string;
+  title: string;
+  done: boolean;
+  assigneeName: string | null;
+  notes: string | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PatientChecklistTaskWrite = {
+  patientChecklistId: string;
+  title: string;
+  done?: boolean;
+  assigneeName?: string | null;
+  notes?: string | null;
+  completedAt?: Date | null;
+};
+
+export type PatientChecklistTaskPatch = Partial<{
+  title: string;
+  done: boolean;
+  assigneeName: string | null;
+  notes: string | null;
+  completedAt: Date | null;
+}>;
+
 export type StoredAuditLog = {
   id: string;
   orgId: string;
@@ -428,6 +605,132 @@ export interface AppStorage {
   ): Promise<StoredTreatment | undefined>;
   deleteTreatment(scope: TenantScope, id: string): Promise<boolean>;
 
+  createPracticeChecklist(
+    scope: TenantScope,
+    input: PracticeChecklistWrite,
+  ): Promise<StoredPracticeChecklist>;
+  getPracticeChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPracticeChecklist | undefined>;
+  listPracticeChecklists(scope: TenantScope): Promise<StoredPracticeChecklist[]>;
+  updatePracticeChecklist(
+    scope: TenantScope,
+    id: string,
+    input: PracticeChecklistPatch,
+  ): Promise<StoredPracticeChecklist | undefined>;
+  deletePracticeChecklist(scope: TenantScope, id: string): Promise<boolean>;
+
+  createPracticeChecklistItem(
+    scope: TenantScope,
+    input: PracticeChecklistItemWrite,
+  ): Promise<StoredPracticeChecklistItem>;
+  getPracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPracticeChecklistItem | undefined>;
+  listPracticeChecklistItems(
+    scope: TenantScope,
+    checklistId?: string,
+  ): Promise<StoredPracticeChecklistItem[]>;
+  updatePracticeChecklistItem(
+    scope: TenantScope,
+    id: string,
+    input: PracticeChecklistItemPatch,
+  ): Promise<StoredPracticeChecklistItem | undefined>;
+  deletePracticeChecklistItem(scope: TenantScope, id: string): Promise<boolean>;
+
+  getPracticeChecklistCompletion(
+    scope: TenantScope,
+    itemId: string,
+    completedOn: string,
+  ): Promise<StoredPracticeChecklistCompletion | undefined>;
+  listPracticeChecklistCompletions(
+    scope: TenantScope,
+    range?: { from?: string; to?: string },
+  ): Promise<StoredPracticeChecklistCompletion[]>;
+  upsertPracticeChecklistCompletion(
+    scope: TenantScope,
+    input: PracticeChecklistCompletionWrite,
+  ): Promise<StoredPracticeChecklistCompletion>;
+
+  createChecklistTemplate(
+    scope: TenantScope,
+    input: ChecklistTemplateWrite,
+  ): Promise<StoredChecklistTemplate>;
+  getChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredChecklistTemplate | undefined>;
+  listChecklistTemplates(scope: TenantScope): Promise<StoredChecklistTemplate[]>;
+  updateChecklistTemplate(
+    scope: TenantScope,
+    id: string,
+    input: ChecklistTemplatePatch,
+  ): Promise<StoredChecklistTemplate | undefined>;
+  deleteChecklistTemplate(scope: TenantScope, id: string): Promise<boolean>;
+
+  createChecklistTemplateTask(
+    scope: TenantScope,
+    input: ChecklistTemplateTaskWrite,
+  ): Promise<StoredChecklistTemplateTask>;
+  getChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredChecklistTemplateTask | undefined>;
+  listChecklistTemplateTasks(
+    scope: TenantScope,
+    templateId?: string,
+  ): Promise<StoredChecklistTemplateTask[]>;
+  updateChecklistTemplateTask(
+    scope: TenantScope,
+    id: string,
+    input: ChecklistTemplateTaskPatch,
+  ): Promise<StoredChecklistTemplateTask | undefined>;
+  deleteChecklistTemplateTask(scope: TenantScope, id: string): Promise<boolean>;
+
+  createPatientChecklist(
+    scope: TenantScope,
+    input: PatientChecklistWrite,
+  ): Promise<StoredPatientChecklist>;
+  getPatientChecklist(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPatientChecklist | undefined>;
+  listPatientChecklists(
+    scope: TenantScope,
+    patientId?: string,
+  ): Promise<StoredPatientChecklist[]>;
+  updatePatientChecklist(
+    scope: TenantScope,
+    id: string,
+    input: PatientChecklistPatch,
+  ): Promise<StoredPatientChecklist | undefined>;
+  deletePatientChecklist(scope: TenantScope, id: string): Promise<boolean>;
+  countPatientChecklistsForTemplate(
+    scope: TenantScope,
+    templateId: string,
+  ): Promise<number>;
+
+  createPatientChecklistTask(
+    scope: TenantScope,
+    input: PatientChecklistTaskWrite,
+  ): Promise<StoredPatientChecklistTask>;
+  getPatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredPatientChecklistTask | undefined>;
+  listPatientChecklistTasks(
+    scope: TenantScope,
+    patientChecklistId?: string,
+  ): Promise<StoredPatientChecklistTask[]>;
+  updatePatientChecklistTask(
+    scope: TenantScope,
+    id: string,
+    input: PatientChecklistTaskPatch,
+  ): Promise<StoredPatientChecklistTask | undefined>;
+  deletePatientChecklistTask(scope: TenantScope, id: string): Promise<boolean>;
+
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
   listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
   countAuditLogs(scope: TenantScope): Promise<number>;
@@ -483,4 +786,7 @@ export interface IsolationProbe {
   listGoalsMissingPracticeFilter(orgId: string): StoredGoal[];
   listReferralSourcesMissingPracticeFilter(orgId: string): StoredReferralSource[];
   listTreatmentsMissingPracticeFilter(orgId: string): StoredTreatment[];
+  listPracticeChecklistsMissingPracticeFilter(orgId: string): StoredPracticeChecklist[];
+  listChecklistTemplatesMissingPracticeFilter(orgId: string): StoredChecklistTemplate[];
+  listPatientChecklistsMissingPracticeFilter(orgId: string): StoredPatientChecklist[];
 }

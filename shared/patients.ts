@@ -55,12 +55,6 @@ export const NEW_PATIENT_FORMULA =
 export const WELLNESS_PATIENT_FORMULA =
   "count of patientType=wellness with activity date (day1Date, else createdAt UTC date) in the period";
 
-export const ONBOARDING_UNAVAILABLE = {
-  available: false as const,
-  reason:
-    "Checklists and onboarding flows land in a later chunk. This profile is the conversion and care-status record.",
-};
-
 export function isPatientType(value: string): value is PatientType {
   return (PATIENT_TYPES as readonly string[]).includes(value);
 }

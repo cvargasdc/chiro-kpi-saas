@@ -46,6 +46,8 @@ import {
 import { requireActiveSubscription } from "../billing/entitlement";
 import type { HttpContext } from "../http-context";
 import type { AppStorage, PatientWrite } from "../storage/types";
+import { patientOnboardingState } from "@shared/onboarding";
+import { patientChecklistSummary } from "../onboarding/public";
 import { publicPatient, publicReferralSource } from "./public";
 
 const dateSchema = z
@@ -379,6 +381,22 @@ export function registerPatientRoutes(app: Express, ctx: HttpContext): void {
       const all = await storage.listPatients(scope);
       const filtered = sortPatients(filterPatients(all, filters));
       const pageRows = filtered.slice(offset, offset + limit);
+      const [assigned, assignedTasks] = await Promise.all([
+        storage.listPatientChecklists(scope),
+        storage.listPatientChecklistTasks(scope),
+      ]);
+      const onboardingByPatient = new Map(
+        pageRows.map((row) => {
+          const mine = assigned.filter((item) => item.patientId === row.id);
+          const summaries = mine.map((item) =>
+            patientChecklistSummary(
+              item,
+              assignedTasks.filter((task) => task.patientChecklistId === item.id),
+            ),
+          );
+          return [row.id, patientOnboardingState(summaries)] as const;
+        }),
+      );
 
       await logAudit(storage, {
         orgId: tenant.orgId,
@@ -407,7 +425,9 @@ export function registerPatientRoutes(app: Express, ctx: HttpContext): void {
             : "has_data";
 
       res.json({
-        patients: pageRows.map(publicPatient),
+        patients: pageRows.map((row) =>
+          publicPatient(row, onboardingByPatient.get(row.id)),
+        ),
         page: { limit, offset, total: filtered.length },
         filters: {
           q: qRaw || null,
@@ -478,13 +498,21 @@ export function registerPatientRoutes(app: Express, ctx: HttpContext): void {
     requireRole(...PHI_READ_ROLES),
     async (req, res) => {
       const tenant = req.tenant!;
-      const patient = await storage.getPatient(
-        { orgId: tenant.orgId, practiceId: tenant.practiceId },
-        req.params.id,
-      );
+      const scope = { orgId: tenant.orgId, practiceId: tenant.practiceId };
+      const patient = await storage.getPatient(scope, req.params.id);
       if (!patient) {
         return res.status(404).json({ error: "not_found" });
       }
+      const assigned = await storage.listPatientChecklists(scope, patient.id);
+      const assignedTasks = await storage.listPatientChecklistTasks(scope);
+      const onboarding = patientOnboardingState(
+        assigned.map((item) =>
+          patientChecklistSummary(
+            item,
+            assignedTasks.filter((task) => task.patientChecklistId === item.id),
+          ),
+        ),
+      );
       await logAudit(storage, {
         orgId: tenant.orgId,
         practiceId: tenant.practiceId,
@@ -492,9 +520,10 @@ export function registerPatientRoutes(app: Express, ctx: HttpContext): void {
         action: "read",
         resourceType: "patient",
         resourceId: patient.id,
+        metadata: { onboardingAssigned: onboarding.assigned },
         ipAddress: getClientIp(req),
       });
-      res.json({ patient: publicPatient(patient) });
+      res.json({ patient: publicPatient(patient, onboarding) });
     },
   );
 

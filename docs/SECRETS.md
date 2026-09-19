@@ -17,7 +17,7 @@ This is not a HIPAA certification artifact. It is the wiring map for App Runner 
 |---------|---------|
 | `SESSION_SECRET` | Signed session cookies |
 | `MFA_ENCRYPTION_KEY` | AES-256-GCM for TOTP secrets |
-| `PHI_ENCRYPTION_KEY` | AES-256-GCM for patient email / phone / DOB (**must differ from MFA key**) |
+| `PHI_ENCRYPTION_KEY` | AES-256-GCM for patient email / phone / DOB / notes and onboarding checklist notes (**must differ from MFA key**) |
 | `DATABASE_URL` | Postgres. Local docker default `chirokpi_local` is rejected in production |
 
 Development still requires `SESSION_SECRET` and the two encryption keys (32+). `DATABASE_URL` is required to actually listen (`server/index.ts`).

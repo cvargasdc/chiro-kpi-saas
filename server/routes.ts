@@ -11,6 +11,8 @@ import { registerDashboardRoutes } from "./dashboard/http";
 import { registerGoalRoutes } from "./goals/http";
 import { registerPatientRoutes } from "./patients/http";
 import { registerReportRoutes } from "./reports/http";
+import { registerOnboardingRoutes } from "./onboarding/http";
+import { registerPracticeChecklistRoutes } from "./practice-checklists/http";
 import { registerTreatmentRoutes } from "./treatments/http";
 import {
   authenticate,
@@ -62,6 +64,8 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
   registerPatientRoutes(app, ctx);
   registerTreatmentRoutes(app, ctx);
   registerReportRoutes(app, ctx);
+  registerPracticeChecklistRoutes(app, ctx);
+  registerOnboardingRoutes(app, ctx);
 
   app.post("/api/organizations", auth, async (req, res) => {
     const parsed = createOrgSchema.safeParse(req.body);

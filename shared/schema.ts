@@ -293,6 +293,9 @@ export const referralSources = pgTable(
  * Encrypted at rest (PHI_ENCRYPTION_KEY, AES-256-GCM): email, phone,
  * dateOfBirth, notes. date_of_birth is text (not date) so the envelope fits.
  * RDS encryption-at-rest is still required.
+ *
+ * Patient onboarding lives on `checklist_templates` / `patient_checklists`
+ * (Week 10), not on this row. Practice Checklists are a separate ops feature.
  */
 export const patients = pgTable(
   "patients",
@@ -484,6 +487,227 @@ export const treatments = pgTable(
 );
 
 /**
+ * Practice Checklists — clinic daily/weekly ops tasks (Week 10).
+ *
+ * Not patient onboarding. Not PHI by itself (no patient names or clinical
+ * notes); still requires org_id + practice_id with no `"default"`.
+ * Cadence is daily | weekly.
+ */
+export const practiceChecklists = pgTable(
+  "practice_checklists",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    name: text("name").notNull(),
+    // daily | weekly
+    cadence: text("cadence").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("practice_checklists_org_practice_idx").on(table.orgId, table.practiceId),
+    index("practice_checklists_practice_active_idx").on(table.practiceId, table.active),
+  ],
+);
+
+export const practiceChecklistItems = pgTable(
+  "practice_checklist_items",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    checklistId: varchar("checklist_id")
+      .notNull()
+      .references(() => practiceChecklists.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    category: text("category").notNull().default("Other"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("practice_checklist_items_org_practice_idx").on(
+      table.orgId,
+      table.practiceId,
+    ),
+    index("practice_checklist_items_checklist_idx").on(table.checklistId),
+  ],
+);
+
+/**
+ * One completion row per item per canonical date (daily = that date;
+ * weekly = Monday of the UTC ISO week). `completed` can be flipped false.
+ */
+export const practiceChecklistCompletions = pgTable(
+  "practice_checklist_completions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    itemId: varchar("item_id")
+      .notNull()
+      .references(() => practiceChecklistItems.id, { onDelete: "cascade" }),
+    completedOn: date("completed_on").notNull(),
+    completedBy: varchar("completed_by"),
+    completed: boolean("completed").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("practice_checklist_completions_org_practice_idx").on(
+      table.orgId,
+      table.practiceId,
+    ),
+    uniqueIndex("practice_checklist_completions_item_date_unique").on(
+      table.practiceId,
+      table.itemId,
+      table.completedOn,
+    ),
+  ],
+);
+
+/**
+ * Patient Onboarding templates (Week 10). Distinct from Practice Checklists.
+ * patient_type: new | wellness | all.
+ */
+export const checklistTemplates = pgTable(
+  "checklist_templates",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    name: text("name").notNull(),
+    // new | wellness | all
+    patientType: text("patient_type").notNull().default("all"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("checklist_templates_org_practice_idx").on(table.orgId, table.practiceId),
+    index("checklist_templates_practice_active_idx").on(table.practiceId, table.active),
+  ],
+);
+
+export const checklistTemplateTasks = pgTable(
+  "checklist_template_tasks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    templateId: varchar("template_id")
+      .notNull()
+      .references(() => checklistTemplates.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("checklist_template_tasks_org_practice_idx").on(
+      table.orgId,
+      table.practiceId,
+    ),
+    index("checklist_template_tasks_template_idx").on(table.templateId),
+  ],
+);
+
+/**
+ * Per-patient onboarding instance. Notes are AES-256-GCM at rest
+ * (PHI_ENCRYPTION_KEY). Audit logs record field names, never note contents
+ * or patient names.
+ */
+export const patientChecklists = pgTable(
+  "patient_checklists",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    patientId: varchar("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "cascade" }),
+    templateId: varchar("template_id").references(() => checklistTemplates.id),
+    // Snapshot of the template name at assign time (not PHI).
+    templateName: text("template_name").notNull(),
+    // not_started | in_progress | complete
+    status: text("status").notNull().default("not_started"),
+    // Ciphertext when PHI_ENCRYPTION_KEY is set.
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("patient_checklists_org_practice_idx").on(table.orgId, table.practiceId),
+    index("patient_checklists_patient_idx").on(table.patientId),
+    index("patient_checklists_template_idx").on(table.templateId),
+  ],
+);
+
+/**
+ * Copied from the template at assign time. Notes encrypted at rest.
+ * Task text may describe patient care — treat as possible PHI; do not put
+ * titles or notes in audit metadata.
+ */
+export const patientChecklistTasks = pgTable(
+  "patient_checklist_tasks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    patientChecklistId: varchar("patient_checklist_id")
+      .notNull()
+      .references(() => patientChecklists.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    done: boolean("done").notNull().default(false),
+    assigneeName: text("assignee_name"),
+    // Ciphertext when PHI_ENCRYPTION_KEY is set.
+    notes: text("notes"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("patient_checklist_tasks_org_practice_idx").on(
+      table.orgId,
+      table.practiceId,
+    ),
+    index("patient_checklist_tasks_checklist_idx").on(table.patientChecklistId),
+  ],
+);
+
+/**
  * Append-only audit log. Retention intent: 6 years (HIPAA §164.530(j)).
  * Automated prune is NOT enabled in Week 2.
  */
@@ -529,6 +753,14 @@ export type DailyStat = typeof dailyStats.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type Treatment = typeof treatments.$inferSelect;
 export type NewTreatment = typeof treatments.$inferInsert;
+export type PracticeChecklist = typeof practiceChecklists.$inferSelect;
+export type PracticeChecklistItem = typeof practiceChecklistItems.$inferSelect;
+export type PracticeChecklistCompletion =
+  typeof practiceChecklistCompletions.$inferSelect;
+export type ChecklistTemplate = typeof checklistTemplates.$inferSelect;
+export type ChecklistTemplateTask = typeof checklistTemplateTasks.$inferSelect;
+export type PatientChecklist = typeof patientChecklists.$inferSelect;
+export type PatientChecklistTask = typeof patientChecklistTasks.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

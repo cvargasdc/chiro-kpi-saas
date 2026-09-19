@@ -9,6 +9,8 @@ import PatientsPage from "./pages/Patients";
 import PatientDetailPage from "./pages/PatientDetail";
 import TreatmentsPage from "./pages/Treatments";
 import ReportsPage from "./pages/Reports";
+import PracticeChecklistsPage from "./pages/PracticeChecklists";
+import OnboardingPage from "./pages/Onboarding";
 import ForgotPasswordPage from "./pages/ForgotPassword";
 import ResetPasswordPage from "./pages/ResetPassword";
 import MfaVerifyPage from "./pages/MfaVerify";
@@ -98,6 +100,20 @@ export default function App() {
       <Route path="/treatments">
         {me ? (
           <TreatmentsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/practice-checklists">
+        {me ? (
+          <PracticeChecklistsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/onboarding">
+        {me ? (
+          <OnboardingPage me={me} onLogout={() => setMe(null)} />
         ) : (
           <Redirect to="/login" />
         )}

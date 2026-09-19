@@ -71,7 +71,19 @@ export type Patient = {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
-  onboarding: { available: false; reason: string };
+  onboarding: {
+    available: true;
+    assigned: boolean;
+    checklists: Array<{
+      id: string;
+      templateId: string | null;
+      templateName: string;
+      status: string;
+      doneCount: number;
+      totalCount: number;
+    }>;
+    reason?: string;
+  };
 };
 
 export type PatientsListResponse = {
@@ -231,6 +243,120 @@ export type DashboardResponse = {
       revenueCents: number;
     }>;
   };
+  onboarding?: {
+    available: true;
+    assignedCount: number;
+    incompleteCount: number;
+    completeCount: number;
+    emptyState: "no_assignments" | "all_complete" | "has_incomplete";
+  };
+};
+
+export type PracticeChecklistItem = {
+  id: string;
+  checklistId: string;
+  title: string;
+  category: string;
+  sortOrder: number;
+  active: boolean;
+};
+
+export type PracticeChecklist = {
+  id: string;
+  name: string;
+  cadence: "daily" | "weekly" | string;
+  active: boolean;
+  items?: PracticeChecklistItem[];
+};
+
+export type PracticeChecklistTodayItem = PracticeChecklistItem & {
+  completed: boolean;
+  completedOn: string | null;
+  completedBy: string | null;
+};
+
+export type PracticeChecklistTodayResponse = {
+  today: string;
+  date: string;
+  weekStart: string;
+  emptyState: "no_checklists" | "no_items" | "has_data";
+  progress: { done: number; total: number };
+  checklists: Array<{
+    id: string;
+    name: string;
+    cadence: string;
+    active: boolean;
+    periodDate: string;
+    progress: { done: number; total: number };
+    items: PracticeChecklistTodayItem[];
+  }>;
+};
+
+export type PracticeChecklistHistoryResponse = {
+  today: string;
+  from: string;
+  to: string;
+  emptyState: "no_checklists" | "no_items" | "has_data";
+  days: Array<{
+    date: string;
+    weekStart: string;
+    progress: { done: number; total: number };
+    emptyState: string;
+  }>;
+};
+
+export type PracticeChecklistManageResponse = {
+  emptyState: "no_checklists" | "has_data";
+  checklists: PracticeChecklist[];
+};
+
+export type OnboardingTemplateTask = {
+  id: string;
+  templateId: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+};
+
+export type OnboardingTemplate = {
+  id: string;
+  name: string;
+  patientType: "new" | "wellness" | "all" | string;
+  active: boolean;
+  taskCount: number;
+  tasks: OnboardingTemplateTask[];
+};
+
+export type OnboardingTemplatesResponse = {
+  emptyState: "no_templates" | "has_data";
+  templates: OnboardingTemplate[];
+};
+
+export type PatientChecklistTask = {
+  id: string;
+  patientChecklistId: string;
+  title: string;
+  done: boolean;
+  assigneeName: string | null;
+  notes: string | null;
+  completedAt: string | null;
+};
+
+export type PatientChecklist = {
+  id: string;
+  patientId: string;
+  templateId: string | null;
+  templateName: string;
+  status: string;
+  notes: string | null;
+  doneCount: number;
+  totalCount: number;
+  tasks: PatientChecklistTask[];
+};
+
+export type PatientChecklistsResponse = {
+  emptyState: "no_checklists" | "has_data";
+  checklists: PatientChecklist[];
 };
 
 export type GoalStatus =
