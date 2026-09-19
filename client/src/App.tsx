@@ -8,6 +8,7 @@ import GoalsPage from "./pages/Goals";
 import PatientsPage from "./pages/Patients";
 import PatientDetailPage from "./pages/PatientDetail";
 import TreatmentsPage from "./pages/Treatments";
+import CarePlanCalculatorPage from "./pages/CarePlanCalculator";
 import ReportsPage from "./pages/Reports";
 import PracticeChecklistsPage from "./pages/PracticeChecklists";
 import OnboardingPage from "./pages/Onboarding";
@@ -100,6 +101,16 @@ export default function App() {
       <Route path="/treatments">
         {me ? (
           <TreatmentsPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/care-plans">
+        {me ? <Redirect to="/care-plan-calculator" /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/care-plan-calculator">
+        {me ? (
+          <CarePlanCalculatorPage me={me} onLogout={() => setMe(null)} />
         ) : (
           <Redirect to="/login" />
         )}

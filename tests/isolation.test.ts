@@ -453,6 +453,85 @@ describe("Practice A cannot read Practice B treatments", () => {
   });
 });
 
+describe("Practice A cannot read Practice B care plans", () => {
+  it("listCarePlans and getCarePlan stay practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+    const payment = {
+      payInFull: { enabled: true, discountPercent: 10 },
+      monthlyPlan: { enabled: false, discountPercent: 0, months: 1 },
+      downPaymentPlan: {
+        enabled: false,
+        discountPercent: 0,
+        months: 1,
+        downPaymentPercent: 0,
+      },
+      planStartDate: null,
+    };
+
+    await store.createCarePlan(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      {
+        firstName: "Ann",
+        lastName: "A",
+        treatmentSelections: [{ treatmentId: "t1", quantity: 1 }],
+        paymentSettings: payment,
+        subtotalCents: 1000,
+      },
+    );
+    await store.createCarePlan(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      {
+        firstName: "Bob",
+        lastName: "B",
+        treatmentSelections: [{ treatmentId: "t2", quantity: 1 }],
+        paymentSettings: payment,
+        subtotalCents: 2000,
+      },
+    );
+    await store.createCarePlan(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      {
+        firstName: "Ava",
+        lastName: "A2",
+        treatmentSelections: [{ treatmentId: "t3", quantity: 1 }],
+        paymentSettings: payment,
+        subtotalCents: 3000,
+      },
+    );
+
+    const listA = await store.listCarePlans({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listA).toHaveLength(1);
+    expect(listA[0].firstName).toBe("Ann");
+
+    const stolen = await store.getCarePlan(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      listA[0].id,
+    );
+    expect(stolen?.firstName).toBe("Ann");
+
+    const unscoped = store.listCarePlansMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listCarePlans({ orgId: orgA.id } as {
+        orgId: string;
+        practiceId: string;
+      }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});
+
 describe("Practice A cannot read Practice B referral sources", () => {
   it("listReferralSources stays practice-scoped", async () => {
     const store = createMemoryStorage();

@@ -429,7 +429,124 @@ export type TreatmentsListResponse = {
   emptyState: "no_treatments" | "no_matches" | "has_data";
   treatments: Treatment[];
   grouped: Array<{ category: string; items: Treatment[] }>;
-  carePlanGenerator: { available: false; reason: string };
+  carePlanGenerator: { available: boolean; reason: string; path?: string };
+};
+
+export type CarePlanPaymentSettings = {
+  payInFull: { enabled: boolean; discountPercent: number };
+  monthlyPlan: { enabled: boolean; discountPercent: number; months: number };
+  downPaymentPlan: {
+    enabled: boolean;
+    discountPercent: number;
+    months: number;
+    downPaymentPercent: number;
+  };
+  planStartDate: string | null;
+};
+
+export type CarePlanLineItem = {
+  treatmentId: string;
+  name: string;
+  category: string | null;
+  quantity: number;
+  unitPriceCents: number;
+  unitPrice: number;
+  unitPriceDisplay: string;
+  lineTotalCents: number;
+  lineTotal: number;
+  lineTotalDisplay: string;
+  missingFromCatalog: boolean;
+};
+
+export type CarePlanPaymentQuotes = {
+  payInFull: {
+    discountPercent: number;
+    discountCents: number;
+    totalCents: number;
+    total: number;
+    totalDisplay: string;
+  } | null;
+  monthlyPlan: {
+    discountPercent: number;
+    discountCents: number;
+    totalCents: number;
+    total: number;
+    totalDisplay: string;
+    months: number;
+    monthlyPaymentCents: number;
+    monthlyPayment: number;
+    monthlyPaymentDisplay: string;
+  } | null;
+  downPaymentPlan: {
+    discountPercent: number;
+    discountCents: number;
+    totalCents: number;
+    total: number;
+    totalDisplay: string;
+    downPaymentPercent: number;
+    downPaymentCents: number;
+    downPayment: number;
+    downPaymentDisplay: string;
+    months: number;
+    monthlyPaymentCents: number;
+    monthlyPayment: number;
+    monthlyPaymentDisplay: string;
+  } | null;
+};
+
+export type CarePlan = {
+  id: string;
+  patientId: string | null;
+  firstName: string;
+  lastName: string;
+  notes: string | null;
+  treatmentSelections: Array<{
+    treatmentId: string;
+    quantity: number;
+    name?: string;
+    unitPriceCents?: number;
+  }>;
+  paymentSettings: CarePlanPaymentSettings;
+  lineItems: CarePlanLineItem[];
+  subtotalCents: number;
+  subtotal: number;
+  subtotalDisplay: string;
+  paymentQuotes: CarePlanPaymentQuotes;
+  status: "draft" | "final";
+  complianceAcknowledgedAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CarePlanTemplate = {
+  id: string;
+  name: string;
+  defaultSelections: {
+    treatmentSelections: CarePlan["treatmentSelections"];
+    paymentSettings: CarePlanPaymentSettings;
+  };
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CarePlanComplianceResponse = {
+  notice: string;
+  terms: string | null;
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+  source: "session" | "stored" | null;
+};
+
+export type CarePlansListResponse = {
+  emptyState: "no_plans" | "has_data";
+  carePlans: CarePlan[];
+};
+
+export type CarePlanTemplatesListResponse = {
+  emptyState: "no_templates" | "has_data";
+  templates: CarePlanTemplate[];
 };
 
 export type TreatmentMutationResponse = {

@@ -1,6 +1,7 @@
 import { decryptAesGcm, encryptAesGcm, isAesGcmCiphertext } from "./aes-gcm";
 import type {
   PatientWrite,
+  StoredCarePlan,
   StoredDailyStat,
   StoredGoal,
   StoredPatient,
@@ -113,6 +114,46 @@ export function decryptStoredPatientChecklistTask(
 ): StoredPatientChecklistTask {
   return {
     ...row,
+    notes: decryptPhiString(row.notes, key),
+  };
+}
+
+/**
+ * When PHI_ENCRYPTION_KEY is unset (tests), store plaintext. decryptPhiString
+ * already accepts legacy plaintext (no `v1:` prefix).
+ */
+export function encryptPhiStringIfKeyed(
+  plaintext: string | null | undefined,
+  key: string,
+): string | null {
+  if (plaintext == null || plaintext === "") return null;
+  if (!key || key.length < 32) return plaintext;
+  return encryptPhiString(plaintext, key);
+}
+
+export function encryptCarePlanSensitiveFields(
+  input: Partial<{ firstName: string; lastName: string; notes: string | null }>,
+  key: string,
+): Partial<{ firstName: string; lastName: string; notes: string | null }> {
+  const out: Partial<{ firstName: string; lastName: string; notes: string | null }> =
+    { ...input };
+  if (input.firstName !== undefined) {
+    out.firstName = encryptPhiStringIfKeyed(input.firstName, key) ?? "";
+  }
+  if (input.lastName !== undefined) {
+    out.lastName = encryptPhiStringIfKeyed(input.lastName, key) ?? "";
+  }
+  if (input.notes !== undefined) {
+    out.notes = encryptPhiStringIfKeyed(input.notes, key);
+  }
+  return out;
+}
+
+export function decryptStoredCarePlan(row: StoredCarePlan, key: string): StoredCarePlan {
+  return {
+    ...row,
+    firstName: decryptPhiString(row.firstName, key) ?? "",
+    lastName: decryptPhiString(row.lastName, key) ?? "",
     notes: decryptPhiString(row.notes, key),
   };
 }

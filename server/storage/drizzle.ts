@@ -3,11 +3,22 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 import type { MembershipRole } from "@shared/roles";
 import {
+  DEFAULT_PAYMENT_SETTINGS,
+  normalizePaymentSettings,
+  normalizeTreatmentSelections,
+  type CarePlanPaymentSettings,
+  type CarePlanStatus,
+  type CarePlanTemplateSelections,
+  type CarePlanTreatmentSelection,
+} from "@shared/care-plans";
+import {
+  decryptStoredCarePlan,
   decryptStoredDailyStat,
   decryptStoredGoal,
   decryptStoredPatient,
   decryptStoredPatientChecklist,
   decryptStoredPatientChecklistTask,
+  encryptCarePlanSensitiveFields,
   encryptPhiString,
 } from "../crypto/fields";
 import { DuplicateDailyLogError } from "../daily-log/errors";
@@ -39,6 +50,15 @@ import type {
   TreatmentPatch,
   TreatmentWrite,
   UserPatch,
+  StoredPracticeSettings,
+  PracticeSettingsPatch,
+  StoredCarePlanComplianceAck,
+  StoredCarePlanTemplate,
+  CarePlanTemplateWrite,
+  CarePlanTemplatePatch,
+  StoredCarePlan,
+  CarePlanWrite,
+  CarePlanPatch,
   StoredPracticeChecklist,
   PracticeChecklistWrite,
   PracticeChecklistPatch,
@@ -227,6 +247,90 @@ function mapTreatmentRow(row: schema.Treatment): StoredTreatment {
   };
 }
 
+function parseSelections(value: unknown): CarePlanTreatmentSelection[] {
+  const parsed = normalizeTreatmentSelections(value);
+  return parsed.ok ? parsed.selections : [];
+}
+
+function parsePaymentSettings(value: unknown): CarePlanPaymentSettings {
+  const parsed = normalizePaymentSettings(value);
+  return parsed.ok ? parsed.settings : { ...DEFAULT_PAYMENT_SETTINGS };
+}
+
+function parseTemplateSelections(value: unknown): CarePlanTemplateSelections {
+  const obj =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    treatmentSelections: parseSelections(obj.treatmentSelections ?? obj),
+    paymentSettings: parsePaymentSettings(obj.paymentSettings),
+  };
+}
+
+function mapPracticeSettingsRow(
+  row: schema.PracticeSettings,
+): StoredPracticeSettings {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    carePlanTerms: row.carePlanTerms ?? null,
+    complianceNotice: row.complianceNotice ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapCarePlanComplianceAckRow(
+  row: schema.CarePlanComplianceAck,
+): StoredCarePlanComplianceAck {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    userId: row.userId,
+    acknowledgedAt: row.acknowledgedAt,
+  };
+}
+
+function mapCarePlanTemplateRow(
+  row: schema.CarePlanTemplate,
+): StoredCarePlanTemplate {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    defaultSelections: parseTemplateSelections(row.defaultSelections),
+    active: row.active,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapCarePlanRow(row: schema.CarePlan): StoredCarePlan {
+  const status: CarePlanStatus = row.status === "final" ? "final" : "draft";
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    patientId: row.patientId ?? null,
+    firstName: row.firstNameEnc,
+    lastName: row.lastNameEnc,
+    notes: row.notesEnc ?? null,
+    treatmentSelections: parseSelections(row.treatmentSelections),
+    paymentSettings: parsePaymentSettings(row.paymentSettings),
+    subtotalCents: row.subtotalCents,
+    status,
+    complianceAcknowledgedAt: row.complianceAcknowledgedAt ?? null,
+    complianceAcknowledgedBy: row.complianceAcknowledgedBy ?? null,
+    createdBy: row.createdBy ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function mapPracticeChecklistRow(
   row: schema.PracticeChecklist,
 ): StoredPracticeChecklist {
@@ -362,6 +466,10 @@ export class DrizzleStorage implements AppStorage {
 
   private revealGoal(row: schema.Goal): StoredGoal {
     return decryptStoredGoal(mapGoalRow(row), this.phiEncryptionKey);
+  }
+
+  private revealCarePlan(row: schema.CarePlan): StoredCarePlan {
+    return decryptStoredCarePlan(mapCarePlanRow(row), this.phiEncryptionKey);
   }
 
   private revealPatientChecklist(
@@ -2174,6 +2282,346 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning({ id: schema.patientChecklistTasks.id });
+    return deleted.length > 0;
+  }
+
+  async getPracticeSettings(
+    scope: TenantScope,
+  ): Promise<StoredPracticeSettings | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.practiceSettings)
+      .where(
+        and(
+          eq(schema.practiceSettings.orgId, orgId),
+          eq(schema.practiceSettings.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapPracticeSettingsRow(row) : undefined;
+  }
+
+  async upsertPracticeSettings(
+    scope: TenantScope,
+    input: PracticeSettingsPatch,
+  ): Promise<StoredPracticeSettings> {
+    const existing = await this.getPracticeSettings(scope);
+    const { orgId, practiceId } = requireTenantScope(scope);
+    if (existing) {
+      const [row] = await this.db
+        .update(schema.practiceSettings)
+        .set({
+          carePlanTerms:
+            input.carePlanTerms === undefined
+              ? existing.carePlanTerms
+              : input.carePlanTerms,
+          complianceNotice:
+            input.complianceNotice === undefined
+              ? existing.complianceNotice
+              : input.complianceNotice,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.practiceSettings.id, existing.id),
+            eq(schema.practiceSettings.orgId, orgId),
+            eq(schema.practiceSettings.practiceId, practiceId),
+          ),
+        )
+        .returning();
+      return row ? mapPracticeSettingsRow(row) : existing;
+    }
+    const [row] = await this.db
+      .insert(schema.practiceSettings)
+      .values({
+        orgId,
+        practiceId,
+        carePlanTerms: input.carePlanTerms ?? null,
+        complianceNotice: input.complianceNotice ?? null,
+      })
+      .returning();
+    return mapPracticeSettingsRow(row);
+  }
+
+  async getCarePlanComplianceAck(
+    scope: TenantScope,
+    userId: string,
+  ): Promise<StoredCarePlanComplianceAck | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.carePlanComplianceAcks)
+      .where(
+        and(
+          eq(schema.carePlanComplianceAcks.orgId, orgId),
+          eq(schema.carePlanComplianceAcks.practiceId, practiceId),
+          eq(schema.carePlanComplianceAcks.userId, userId),
+        ),
+      )
+      .limit(1);
+    return row ? mapCarePlanComplianceAckRow(row) : undefined;
+  }
+
+  async upsertCarePlanComplianceAck(
+    scope: TenantScope,
+    userId: string,
+    acknowledgedAt: Date,
+  ): Promise<StoredCarePlanComplianceAck> {
+    const existing = await this.getCarePlanComplianceAck(scope, userId);
+    const { orgId, practiceId } = requireTenantScope(scope);
+    if (existing) {
+      const [row] = await this.db
+        .update(schema.carePlanComplianceAcks)
+        .set({ acknowledgedAt })
+        .where(
+          and(
+            eq(schema.carePlanComplianceAcks.id, existing.id),
+            eq(schema.carePlanComplianceAcks.orgId, orgId),
+            eq(schema.carePlanComplianceAcks.practiceId, practiceId),
+          ),
+        )
+        .returning();
+      return row ? mapCarePlanComplianceAckRow(row) : { ...existing, acknowledgedAt };
+    }
+    const [row] = await this.db
+      .insert(schema.carePlanComplianceAcks)
+      .values({ orgId, practiceId, userId, acknowledgedAt })
+      .returning();
+    return mapCarePlanComplianceAckRow(row);
+  }
+
+  async createCarePlanTemplate(
+    scope: TenantScope,
+    input: CarePlanTemplateWrite,
+  ): Promise<StoredCarePlanTemplate> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.carePlanTemplates)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        defaultSelections: input.defaultSelections,
+        active: input.active ?? true,
+      })
+      .returning();
+    return mapCarePlanTemplateRow(row);
+  }
+
+  async getCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredCarePlanTemplate | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.carePlanTemplates)
+      .where(
+        and(
+          eq(schema.carePlanTemplates.id, id),
+          eq(schema.carePlanTemplates.orgId, orgId),
+          eq(schema.carePlanTemplates.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? mapCarePlanTemplateRow(row) : undefined;
+  }
+
+  async listCarePlanTemplates(
+    scope: TenantScope,
+  ): Promise<StoredCarePlanTemplate[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.carePlanTemplates)
+      .where(
+        and(
+          eq(schema.carePlanTemplates.orgId, orgId),
+          eq(schema.carePlanTemplates.practiceId, practiceId),
+        ),
+      )
+      .orderBy(desc(schema.carePlanTemplates.createdAt));
+    return rows.map(mapCarePlanTemplateRow);
+  }
+
+  async updateCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+    input: CarePlanTemplatePatch,
+  ): Promise<StoredCarePlanTemplate | undefined> {
+    const existing = await this.getCarePlanTemplate(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.carePlanTemplates)
+      .set({
+        name: input.name ?? existing.name,
+        defaultSelections: input.defaultSelections ?? existing.defaultSelections,
+        active: input.active ?? existing.active,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.carePlanTemplates.id, id),
+          eq(schema.carePlanTemplates.orgId, orgId),
+          eq(schema.carePlanTemplates.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? mapCarePlanTemplateRow(row) : undefined;
+  }
+
+  async deleteCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.carePlanTemplates)
+      .where(
+        and(
+          eq(schema.carePlanTemplates.id, id),
+          eq(schema.carePlanTemplates.orgId, orgId),
+          eq(schema.carePlanTemplates.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.carePlanTemplates.id });
+    return deleted.length > 0;
+  }
+
+  async createCarePlan(
+    scope: TenantScope,
+    input: CarePlanWrite,
+  ): Promise<StoredCarePlan> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const enc = encryptCarePlanSensitiveFields(
+      {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        notes: input.notes ?? null,
+      },
+      this.phiEncryptionKey,
+    );
+    const [row] = await this.db
+      .insert(schema.carePlans)
+      .values({
+        orgId,
+        practiceId,
+        patientId: input.patientId ?? null,
+        firstNameEnc: enc.firstName ?? "",
+        lastNameEnc: enc.lastName ?? "",
+        notesEnc: enc.notes ?? null,
+        treatmentSelections: input.treatmentSelections,
+        paymentSettings: input.paymentSettings,
+        subtotalCents: input.subtotalCents,
+        status: input.status ?? "draft",
+        complianceAcknowledgedAt: input.complianceAcknowledgedAt ?? null,
+        complianceAcknowledgedBy: input.complianceAcknowledgedBy ?? null,
+        createdBy: input.createdBy ?? null,
+      })
+      .returning();
+    return this.revealCarePlan(row);
+  }
+
+  async getCarePlan(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredCarePlan | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.carePlans)
+      .where(
+        and(
+          eq(schema.carePlans.id, id),
+          eq(schema.carePlans.orgId, orgId),
+          eq(schema.carePlans.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? this.revealCarePlan(row) : undefined;
+  }
+
+  async listCarePlans(scope: TenantScope): Promise<StoredCarePlan[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.carePlans)
+      .where(
+        and(
+          eq(schema.carePlans.orgId, orgId),
+          eq(schema.carePlans.practiceId, practiceId),
+        ),
+      )
+      .orderBy(desc(schema.carePlans.createdAt));
+    return rows.map((row) => this.revealCarePlan(row));
+  }
+
+  async updateCarePlan(
+    scope: TenantScope,
+    id: string,
+    input: CarePlanPatch,
+  ): Promise<StoredCarePlan | undefined> {
+    const existing = await this.getCarePlan(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const enc = encryptCarePlanSensitiveFields(
+      {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        notes: input.notes,
+      },
+      this.phiEncryptionKey,
+    );
+    const [row] = await this.db
+      .update(schema.carePlans)
+      .set({
+        patientId:
+          input.patientId === undefined ? existing.patientId : input.patientId,
+        firstNameEnc:
+          input.firstName === undefined ? undefined : (enc.firstName ?? ""),
+        lastNameEnc:
+          input.lastName === undefined ? undefined : (enc.lastName ?? ""),
+        notesEnc: input.notes === undefined ? undefined : enc.notes,
+        treatmentSelections:
+          input.treatmentSelections ?? existing.treatmentSelections,
+        paymentSettings: input.paymentSettings ?? existing.paymentSettings,
+        subtotalCents: input.subtotalCents ?? existing.subtotalCents,
+        status: input.status ?? existing.status,
+        complianceAcknowledgedAt:
+          input.complianceAcknowledgedAt === undefined
+            ? existing.complianceAcknowledgedAt
+            : input.complianceAcknowledgedAt,
+        complianceAcknowledgedBy:
+          input.complianceAcknowledgedBy === undefined
+            ? existing.complianceAcknowledgedBy
+            : input.complianceAcknowledgedBy,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.carePlans.id, id),
+          eq(schema.carePlans.orgId, orgId),
+          eq(schema.carePlans.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? this.revealCarePlan(row) : undefined;
+  }
+
+  async deleteCarePlan(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.carePlans)
+      .where(
+        and(
+          eq(schema.carePlans.id, id),
+          eq(schema.carePlans.orgId, orgId),
+          eq(schema.carePlans.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.carePlans.id });
     return deleted.length > 0;
   }
 

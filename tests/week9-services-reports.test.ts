@@ -45,7 +45,7 @@ describe("Treatments catalog APIs", () => {
     expect(empty.status).toBe(200);
     expect(empty.body.emptyState).toBe("no_treatments");
     expect(empty.body.treatments).toEqual([]);
-    expect(empty.body.carePlanGenerator.available).toBe(false);
+    expect(empty.body.carePlanGenerator.available).toBe(true);
 
     const created = await a.agent.post("/api/treatments").send({
       name: "Cervical adjustment",

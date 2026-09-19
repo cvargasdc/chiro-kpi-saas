@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
+  decryptStoredCarePlan,
   decryptStoredDailyStat,
   decryptStoredGoal,
   decryptStoredPatient,
   decryptStoredPatientChecklist,
   decryptStoredPatientChecklistTask,
+  encryptCarePlanSensitiveFields,
   encryptPhiString,
 } from "../crypto/fields";
 import { DuplicateDailyLogError } from "../daily-log/errors";
@@ -37,6 +39,15 @@ import type {
   TreatmentPatch,
   TreatmentWrite,
   UserPatch,
+  StoredPracticeSettings,
+  PracticeSettingsPatch,
+  StoredCarePlanComplianceAck,
+  StoredCarePlanTemplate,
+  CarePlanTemplateWrite,
+  CarePlanTemplatePatch,
+  StoredCarePlan,
+  CarePlanWrite,
+  CarePlanPatch,
   StoredPracticeChecklist,
   PracticeChecklistWrite,
   PracticeChecklistPatch,
@@ -78,6 +89,11 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
   goals: StoredGoal[] = [];
   treatments: StoredTreatment[] = [];
+  practiceSettings: StoredPracticeSettings[] = [];
+  carePlanComplianceAcks: StoredCarePlanComplianceAck[] = [];
+  carePlanTemplates: StoredCarePlanTemplate[] = [];
+  /** firstName/lastName/notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  carePlans: StoredCarePlan[] = [];
   practiceChecklists: StoredPracticeChecklist[] = [];
   practiceChecklistItems: StoredPracticeChecklistItem[] = [];
   practiceChecklistCompletions: StoredPracticeChecklistCompletion[] = [];
@@ -862,6 +878,327 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     );
     if (index === -1) return false;
     this.treatments.splice(index, 1);
+    return true;
+  }
+
+  async getPracticeSettings(
+    scope: TenantScope,
+  ): Promise<StoredPracticeSettings | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.practiceSettings.find(
+      (item) => item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async upsertPracticeSettings(
+    scope: TenantScope,
+    input: PracticeSettingsPatch,
+  ): Promise<StoredPracticeSettings> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.practiceSettings.find(
+      (item) => item.orgId === orgId && item.practiceId === practiceId,
+    );
+    if (existing) {
+      if (input.carePlanTerms !== undefined) {
+        existing.carePlanTerms = input.carePlanTerms;
+      }
+      if (input.complianceNotice !== undefined) {
+        existing.complianceNotice = input.complianceNotice;
+      }
+      existing.updatedAt = now();
+      return { ...existing };
+    }
+    const row: StoredPracticeSettings = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      carePlanTerms: input.carePlanTerms ?? null,
+      complianceNotice: input.complianceNotice ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.practiceSettings.push(row);
+    return { ...row };
+  }
+
+  async getCarePlanComplianceAck(
+    scope: TenantScope,
+    userId: string,
+  ): Promise<StoredCarePlanComplianceAck | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.carePlanComplianceAcks.find(
+      (item) =>
+        item.orgId === orgId &&
+        item.practiceId === practiceId &&
+        item.userId === userId,
+    );
+    return row ? { ...row } : undefined;
+  }
+
+  async upsertCarePlanComplianceAck(
+    scope: TenantScope,
+    userId: string,
+    acknowledgedAt: Date,
+  ): Promise<StoredCarePlanComplianceAck> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.carePlanComplianceAcks.find(
+      (item) =>
+        item.orgId === orgId &&
+        item.practiceId === practiceId &&
+        item.userId === userId,
+    );
+    if (existing) {
+      existing.acknowledgedAt = acknowledgedAt;
+      return { ...existing };
+    }
+    const row: StoredCarePlanComplianceAck = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      userId,
+      acknowledgedAt,
+    };
+    this.carePlanComplianceAcks.push(row);
+    return { ...row };
+  }
+
+  async createCarePlanTemplate(
+    scope: TenantScope,
+    input: CarePlanTemplateWrite,
+  ): Promise<StoredCarePlanTemplate> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row: StoredCarePlanTemplate = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      name: input.name,
+      defaultSelections: structuredClone(input.defaultSelections),
+      active: input.active ?? true,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.carePlanTemplates.push(row);
+    return {
+      ...row,
+      defaultSelections: structuredClone(row.defaultSelections),
+    };
+  }
+
+  async getCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredCarePlanTemplate | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.carePlanTemplates.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row
+      ? { ...row, defaultSelections: structuredClone(row.defaultSelections) }
+      : undefined;
+  }
+
+  async listCarePlanTemplates(
+    scope: TenantScope,
+  ): Promise<StoredCarePlanTemplate[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.carePlanTemplates
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((row) => ({
+        ...row,
+        defaultSelections: structuredClone(row.defaultSelections),
+      }));
+  }
+
+  listCarePlanTemplatesMissingPracticeFilter(
+    orgId: string,
+  ): StoredCarePlanTemplate[] {
+    return this.carePlanTemplates.filter((row) => row.orgId === orgId);
+  }
+
+  async updateCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+    input: CarePlanTemplatePatch,
+  ): Promise<StoredCarePlanTemplate | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.carePlanTemplates.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    if (input.name !== undefined) existing.name = input.name;
+    if (input.defaultSelections !== undefined) {
+      existing.defaultSelections = structuredClone(input.defaultSelections);
+    }
+    if (input.active !== undefined) existing.active = input.active;
+    existing.updatedAt = now();
+    return {
+      ...existing,
+      defaultSelections: structuredClone(existing.defaultSelections),
+    };
+  }
+
+  async deleteCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.carePlanTemplates.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.carePlanTemplates.splice(index, 1);
+    return true;
+  }
+
+  async createCarePlan(
+    scope: TenantScope,
+    input: CarePlanWrite,
+  ): Promise<StoredCarePlan> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const enc = encryptCarePlanSensitiveFields(
+      {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        notes: input.notes ?? null,
+      },
+      this.phiEncryptionKey,
+    );
+    const row: StoredCarePlan = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      patientId: input.patientId ?? null,
+      firstName: enc.firstName ?? "",
+      lastName: enc.lastName ?? "",
+      notes: enc.notes ?? null,
+      treatmentSelections: structuredClone(input.treatmentSelections),
+      paymentSettings: structuredClone(input.paymentSettings),
+      subtotalCents: input.subtotalCents,
+      status: input.status ?? "draft",
+      complianceAcknowledgedAt: input.complianceAcknowledgedAt ?? null,
+      complianceAcknowledgedBy: input.complianceAcknowledgedBy ?? null,
+      createdBy: input.createdBy ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.carePlans.push(row);
+    return decryptStoredCarePlan(
+      {
+        ...row,
+        treatmentSelections: structuredClone(row.treatmentSelections),
+        paymentSettings: structuredClone(row.paymentSettings),
+      },
+      this.phiEncryptionKey,
+    );
+  }
+
+  async getCarePlan(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredCarePlan | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.carePlans.find(
+      (item) =>
+        item.id === id && item.orgId === orgId && item.practiceId === practiceId,
+    );
+    return row
+      ? decryptStoredCarePlan(
+          {
+            ...row,
+            treatmentSelections: structuredClone(row.treatmentSelections),
+            paymentSettings: structuredClone(row.paymentSettings),
+          },
+          this.phiEncryptionKey,
+        )
+      : undefined;
+  }
+
+  async listCarePlans(scope: TenantScope): Promise<StoredCarePlan[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.carePlans
+      .filter((row) => row.orgId === orgId && row.practiceId === practiceId)
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((row) =>
+        decryptStoredCarePlan(
+          {
+            ...row,
+            treatmentSelections: structuredClone(row.treatmentSelections),
+            paymentSettings: structuredClone(row.paymentSettings),
+          },
+          this.phiEncryptionKey,
+        ),
+      );
+  }
+
+  listCarePlansMissingPracticeFilter(orgId: string): StoredCarePlan[] {
+    return this.carePlans.filter((row) => row.orgId === orgId);
+  }
+
+  async updateCarePlan(
+    scope: TenantScope,
+    id: string,
+    input: CarePlanPatch,
+  ): Promise<StoredCarePlan | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.carePlans.find(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (!existing) return undefined;
+    const enc = encryptCarePlanSensitiveFields(
+      {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        notes: input.notes,
+      },
+      this.phiEncryptionKey,
+    );
+    if (input.patientId !== undefined) existing.patientId = input.patientId;
+    if (input.firstName !== undefined) existing.firstName = enc.firstName ?? "";
+    if (input.lastName !== undefined) existing.lastName = enc.lastName ?? "";
+    if (input.notes !== undefined) existing.notes = enc.notes ?? null;
+    if (input.treatmentSelections !== undefined) {
+      existing.treatmentSelections = structuredClone(input.treatmentSelections);
+    }
+    if (input.paymentSettings !== undefined) {
+      existing.paymentSettings = structuredClone(input.paymentSettings);
+    }
+    if (input.subtotalCents !== undefined) {
+      existing.subtotalCents = input.subtotalCents;
+    }
+    if (input.status !== undefined) existing.status = input.status;
+    if (input.complianceAcknowledgedAt !== undefined) {
+      existing.complianceAcknowledgedAt = input.complianceAcknowledgedAt;
+    }
+    if (input.complianceAcknowledgedBy !== undefined) {
+      existing.complianceAcknowledgedBy = input.complianceAcknowledgedBy;
+    }
+    existing.updatedAt = now();
+    return decryptStoredCarePlan(
+      {
+        ...existing,
+        treatmentSelections: structuredClone(existing.treatmentSelections),
+        paymentSettings: structuredClone(existing.paymentSettings),
+      },
+      this.phiEncryptionKey,
+    );
+  }
+
+  async deleteCarePlan(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.carePlans.findIndex(
+      (row) =>
+        row.id === id && row.orgId === orgId && row.practiceId === practiceId,
+    );
+    if (index === -1) return false;
+    this.carePlans.splice(index, 1);
     return true;
   }
 

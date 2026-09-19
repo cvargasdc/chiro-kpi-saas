@@ -7,6 +7,10 @@ import {
   dailyStats,
   goals,
   treatments,
+  practiceSettings,
+  carePlanTemplates,
+  carePlans,
+  carePlanComplianceAcks,
   practiceChecklists,
   practiceChecklistItems,
   practiceChecklistCompletions,
@@ -37,6 +41,10 @@ describe("Path B schema constraints", () => {
       dailyStats,
       goals,
       treatments,
+      practiceSettings,
+      carePlanTemplates,
+      carePlans,
+      carePlanComplianceAcks,
       practiceChecklists,
       practiceChecklistItems,
       practiceChecklistCompletions,
@@ -142,6 +150,24 @@ describe("Path B schema constraints", () => {
     expect(patientChecklistTasks.practiceId.notNull).toBe(true);
     expect(SCHEMA).toMatch(/Not patient onboarding/);
     expect(SCHEMA).toMatch(/Distinct from Practice Checklists/);
+  });
+
+  it("stores care plans with encrypted name columns and integer subtotal cents", () => {
+    expect(SCHEMA).toMatch(/firstNameEnc:\s*text\("first_name_enc"\)/);
+    expect(SCHEMA).toMatch(/lastNameEnc:\s*text\("last_name_enc"\)/);
+    expect(SCHEMA).toMatch(/notesEnc:\s*text\("notes_enc"\)/);
+    expect(SCHEMA).toMatch(/subtotalCents:\s*integer\("subtotal_cents"\)/);
+    expect(SCHEMA).toMatch(/export const carePlans = pgTable/);
+    expect(SCHEMA).toMatch(/export const carePlanTemplates = pgTable/);
+    expect(SCHEMA).toMatch(/care_plan_terms/);
+    expect(carePlans.orgId.notNull).toBe(true);
+    expect(carePlans.practiceId.notNull).toBe(true);
+    expect(carePlanTemplates.orgId.notNull).toBe(true);
+    expect(carePlanTemplates.practiceId.notNull).toBe(true);
+    expect(practiceSettings.orgId.notNull).toBe(true);
+    expect(practiceSettings.practiceId.notNull).toBe(true);
+    expect(carePlanComplianceAcks.orgId.notNull).toBe(true);
+    expect(carePlanComplianceAcks.practiceId.notNull).toBe(true);
   });
 
   it("does not ship ChiroTouch parsers", () => {

@@ -27,10 +27,13 @@ export const MAX_PRICE_CENTS = 1_000_000_000; // $10,000,000.00
 export const MAX_SORT_ORDER = 10_000;
 export const MIN_SORT_ORDER = -10_000;
 
+export { CARE_PLAN_GENERATOR } from "./care-plans";
+
+/** @deprecated Use CARE_PLAN_GENERATOR. Kept so older imports keep compiling. */
 export const CARE_PLAN_GENERATOR_UNAVAILABLE = {
-  available: false as const,
+  available: true as const,
   reason:
-    "Care Plan Generator lands in a later chunk. This catalog is the price book only.",
+    "Care Plan Generator is available after the practitioner acknowledges the compliance notice.",
 };
 
 export function isKnownTreatmentCategory(

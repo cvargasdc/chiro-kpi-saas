@@ -136,8 +136,8 @@ export default function TreatmentsPage({ me, onLogout }: Props) {
         <div>
           <h2 className="text-2xl font-semibold">Services</h2>
           <p className="text-sm text-ink-500">
-            Practice treatment catalog and price book. Care plans can use these
-            later — this page is the list only.
+            Practice treatment catalog and price book. The Care Plan Generator
+            uses these prices.
           </p>
         </div>
         <label className="text-sm flex items-center gap-2">
@@ -272,7 +272,7 @@ export default function TreatmentsPage({ me, onLogout }: Props) {
             </p>
             <p className="text-sm text-ink-500">
               {data.emptyState === "no_treatments"
-                ? "Add adjustments, therapy, and exams so the catalog is ready for later care plans."
+                ? "Add adjustments, therapy, and exams so care plans can pick from this catalog."
                 : "Inactive services are hidden. Turn on “Show inactive” to see them."}
             </p>
           </div>

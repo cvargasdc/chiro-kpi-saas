@@ -487,6 +487,142 @@ export const treatments = pgTable(
 );
 
 /**
+ * Practice branding / care-plan copy (Week 11). Not patient PHI.
+ * org_id + practice_id required; no `"default"`. One row per practice.
+ *
+ * care_plan_terms: optional Terms of Agreement text for generated PDFs.
+ * compliance_notice: optional override of the default compliance notice.
+ */
+export const practiceSettings = pgTable(
+  "practice_settings",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    carePlanTerms: text("care_plan_terms"),
+    complianceNotice: text("compliance_notice"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("practice_settings_practice_id_unique").on(table.practiceId),
+    index("practice_settings_org_practice_idx").on(table.orgId, table.practiceId),
+  ],
+);
+
+/**
+ * Per-user stored acknowledgment that the care-plan compliance notice was
+ * read. Combined with the session flag to unlock create/update/generate.
+ * Not PHI. org_id + practice_id required; no `"default"`.
+ */
+export const carePlanComplianceAcks = pgTable(
+  "care_plan_compliance_acks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("care_plan_compliance_acks_practice_user_unique").on(
+      table.practiceId,
+      table.userId,
+    ),
+    index("care_plan_compliance_acks_org_practice_idx").on(
+      table.orgId,
+      table.practiceId,
+    ),
+  ],
+);
+
+/**
+ * Care plan templates (Week 11). Not patient PHI (no names). Still requires
+ * org_id + practice_id with no `"default"`.
+ *
+ * default_selections JSON:
+ *   { treatmentSelections: [{ treatmentId, quantity }], paymentSettings }
+ */
+export const carePlanTemplates = pgTable(
+  "care_plan_templates",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    name: text("name").notNull(),
+    defaultSelections: jsonb("default_selections").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("care_plan_templates_org_practice_idx").on(table.orgId, table.practiceId),
+    index("care_plan_templates_practice_active_idx").on(table.practiceId, table.active),
+  ],
+);
+
+/**
+ * Care plans (Week 11). Path B PHI: first/last name and notes are ePHI.
+ *
+ * Encrypted at rest (PHI_ENCRYPTION_KEY, AES-256-GCM): first_name_enc,
+ * last_name_enc, notes_enc. Storage callers always see plaintext.
+ *
+ * Audit logs record IDs, field names, counts, status — never names or notes.
+ *
+ * treatment_selections JSON: [{ treatmentId, quantity, name?, unitPriceCents? }]
+ * payment_settings JSON: see docs/WEEK11-CARE-PLANS.md
+ * status: draft | final
+ */
+export const carePlans = pgTable(
+  "care_plans",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: varchar("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    practiceId: varchar("practice_id")
+      .notNull()
+      .references(() => practices.id),
+    patientId: varchar("patient_id").references(() => patients.id, {
+      onDelete: "set null",
+    }),
+    firstNameEnc: text("first_name_enc").notNull(),
+    lastNameEnc: text("last_name_enc").notNull(),
+    notesEnc: text("notes_enc"),
+    treatmentSelections: jsonb("treatment_selections").notNull(),
+    paymentSettings: jsonb("payment_settings").notNull(),
+    subtotalCents: integer("subtotal_cents").notNull().default(0),
+    status: text("status").notNull().default("draft"),
+    complianceAcknowledgedAt: timestamp("compliance_acknowledged_at", {
+      withTimezone: true,
+    }),
+    complianceAcknowledgedBy: varchar("compliance_acknowledged_by"),
+    createdBy: varchar("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("care_plans_org_practice_idx").on(table.orgId, table.practiceId),
+    index("care_plans_practice_id_idx").on(table.practiceId),
+    index("care_plans_patient_idx").on(table.patientId),
+  ],
+);
+
+/**
  * Practice Checklists — clinic daily/weekly ops tasks (Week 10).
  *
  * Not patient onboarding. Not PHI by itself (no patient names or clinical
@@ -753,6 +889,12 @@ export type DailyStat = typeof dailyStats.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type Treatment = typeof treatments.$inferSelect;
 export type NewTreatment = typeof treatments.$inferInsert;
+export type PracticeSettings = typeof practiceSettings.$inferSelect;
+export type CarePlanComplianceAck = typeof carePlanComplianceAcks.$inferSelect;
+export type CarePlanTemplate = typeof carePlanTemplates.$inferSelect;
+export type NewCarePlanTemplate = typeof carePlanTemplates.$inferInsert;
+export type CarePlan = typeof carePlans.$inferSelect;
+export type NewCarePlan = typeof carePlans.$inferInsert;
 export type PracticeChecklist = typeof practiceChecklists.$inferSelect;
 export type PracticeChecklistItem = typeof practiceChecklistItems.$inferSelect;
 export type PracticeChecklistCompletion =

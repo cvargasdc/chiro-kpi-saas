@@ -1,8 +1,5 @@
 import { centsToDollars } from "@shared/kpis";
-import {
-  CARE_PLAN_GENERATOR_UNAVAILABLE,
-  formatPriceCents,
-} from "@shared/treatments";
+import { formatPriceCents } from "@shared/treatments";
 import type { StoredTreatment } from "../storage/types";
 
 export type PublicTreatment = {
@@ -35,4 +32,4 @@ export function publicTreatment(row: StoredTreatment): PublicTreatment {
   };
 }
 
-export { CARE_PLAN_GENERATOR_UNAVAILABLE };
+export { CARE_PLAN_GENERATOR, CARE_PLAN_GENERATOR_UNAVAILABLE } from "@shared/treatments";

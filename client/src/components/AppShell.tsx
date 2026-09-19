@@ -75,6 +75,14 @@ export default function AppShell({ me, onLogout, children }: Props) {
           >
             Services
           </NavLink>
+          <NavLink
+            href="/care-plan-calculator"
+            current={
+              location === "/care-plan-calculator" || location === "/care-plans"
+            }
+          >
+            Care Plans
+          </NavLink>
           <NavLink href="/reports" current={location === "/reports"}>
             Reports
           </NavLink>

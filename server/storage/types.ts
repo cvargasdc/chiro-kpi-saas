@@ -1,4 +1,10 @@
 import type { SubscriptionStatus } from "@shared/billing";
+import type {
+  CarePlanPaymentSettings,
+  CarePlanStatus,
+  CarePlanTemplateSelections,
+  CarePlanTreatmentSelection,
+} from "@shared/care-plans";
 import type { MembershipRole } from "@shared/roles";
 import type { TenantScope } from "../tenant/scope";
 import type { AuditLogQuery } from "./audit-query";
@@ -240,6 +246,102 @@ export type TreatmentPatch = Partial<{
   priceCents: number;
   active: boolean;
   sortOrder: number;
+}>;
+
+export type StoredPracticeSettings = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  carePlanTerms: string | null;
+  complianceNotice: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PracticeSettingsPatch = Partial<{
+  carePlanTerms: string | null;
+  complianceNotice: string | null;
+}>;
+
+export type StoredCarePlanComplianceAck = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  userId: string;
+  acknowledgedAt: Date;
+};
+
+export type StoredCarePlanTemplate = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  defaultSelections: CarePlanTemplateSelections;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type CarePlanTemplateWrite = {
+  name: string;
+  defaultSelections: CarePlanTemplateSelections;
+  active?: boolean;
+};
+
+export type CarePlanTemplatePatch = Partial<{
+  name: string;
+  defaultSelections: CarePlanTemplateSelections;
+  active: boolean;
+}>;
+
+/**
+ * Callers of the storage layer always see plaintext first/last name and notes.
+ * Columns `first_name_enc` / `last_name_enc` / `notes_enc` hold ciphertext.
+ */
+export type StoredCarePlan = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  patientId: string | null;
+  firstName: string;
+  lastName: string;
+  notes: string | null;
+  treatmentSelections: CarePlanTreatmentSelection[];
+  paymentSettings: CarePlanPaymentSettings;
+  subtotalCents: number;
+  status: CarePlanStatus;
+  complianceAcknowledgedAt: Date | null;
+  complianceAcknowledgedBy: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type CarePlanWrite = {
+  patientId?: string | null;
+  firstName: string;
+  lastName: string;
+  notes?: string | null;
+  treatmentSelections: CarePlanTreatmentSelection[];
+  paymentSettings: CarePlanPaymentSettings;
+  subtotalCents: number;
+  status?: CarePlanStatus;
+  complianceAcknowledgedAt?: Date | null;
+  complianceAcknowledgedBy?: string | null;
+  createdBy?: string | null;
+};
+
+export type CarePlanPatch = Partial<{
+  patientId: string | null;
+  firstName: string;
+  lastName: string;
+  notes: string | null;
+  treatmentSelections: CarePlanTreatmentSelection[];
+  paymentSettings: CarePlanPaymentSettings;
+  subtotalCents: number;
+  status: CarePlanStatus;
+  complianceAcknowledgedAt: Date | null;
+  complianceAcknowledgedBy: string | null;
 }>;
 
 export type StoredPracticeChecklist = {
@@ -605,6 +707,50 @@ export interface AppStorage {
   ): Promise<StoredTreatment | undefined>;
   deleteTreatment(scope: TenantScope, id: string): Promise<boolean>;
 
+  getPracticeSettings(
+    scope: TenantScope,
+  ): Promise<StoredPracticeSettings | undefined>;
+  upsertPracticeSettings(
+    scope: TenantScope,
+    input: PracticeSettingsPatch,
+  ): Promise<StoredPracticeSettings>;
+
+  getCarePlanComplianceAck(
+    scope: TenantScope,
+    userId: string,
+  ): Promise<StoredCarePlanComplianceAck | undefined>;
+  upsertCarePlanComplianceAck(
+    scope: TenantScope,
+    userId: string,
+    acknowledgedAt: Date,
+  ): Promise<StoredCarePlanComplianceAck>;
+
+  createCarePlanTemplate(
+    scope: TenantScope,
+    input: CarePlanTemplateWrite,
+  ): Promise<StoredCarePlanTemplate>;
+  getCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+  ): Promise<StoredCarePlanTemplate | undefined>;
+  listCarePlanTemplates(scope: TenantScope): Promise<StoredCarePlanTemplate[]>;
+  updateCarePlanTemplate(
+    scope: TenantScope,
+    id: string,
+    input: CarePlanTemplatePatch,
+  ): Promise<StoredCarePlanTemplate | undefined>;
+  deleteCarePlanTemplate(scope: TenantScope, id: string): Promise<boolean>;
+
+  createCarePlan(scope: TenantScope, input: CarePlanWrite): Promise<StoredCarePlan>;
+  getCarePlan(scope: TenantScope, id: string): Promise<StoredCarePlan | undefined>;
+  listCarePlans(scope: TenantScope): Promise<StoredCarePlan[]>;
+  updateCarePlan(
+    scope: TenantScope,
+    id: string,
+    input: CarePlanPatch,
+  ): Promise<StoredCarePlan | undefined>;
+  deleteCarePlan(scope: TenantScope, id: string): Promise<boolean>;
+
   createPracticeChecklist(
     scope: TenantScope,
     input: PracticeChecklistWrite,
@@ -789,4 +935,6 @@ export interface IsolationProbe {
   listPracticeChecklistsMissingPracticeFilter(orgId: string): StoredPracticeChecklist[];
   listChecklistTemplatesMissingPracticeFilter(orgId: string): StoredChecklistTemplate[];
   listPatientChecklistsMissingPracticeFilter(orgId: string): StoredPatientChecklist[];
+  listCarePlansMissingPracticeFilter(orgId: string): StoredCarePlan[];
+  listCarePlanTemplatesMissingPracticeFilter(orgId: string): StoredCarePlanTemplate[];
 }

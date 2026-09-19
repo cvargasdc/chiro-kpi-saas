@@ -12,6 +12,7 @@ export type AuditAction =
   | "delete"
   | "list"
   | "export"
+  | "acknowledge"
   | "login"
   | "login_failed"
   | "logout"

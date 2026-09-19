@@ -29,6 +29,7 @@ declare module "express-session" {
     activeOrgId?: string;
     activePracticeId?: string;
     authIssuedAt?: string;
+    carePlanComplianceAcknowledgedAt?: string;
   }
 }
 

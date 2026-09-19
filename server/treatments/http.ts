@@ -6,7 +6,7 @@ import {
   PHI_WRITE_ROLES,
 } from "@shared/roles";
 import {
-  CARE_PLAN_GENERATOR_UNAVAILABLE,
+  CARE_PLAN_GENERATOR,
   MAX_PRICE_CENTS,
   MAX_SORT_ORDER,
   MAX_TREATMENT_CATEGORY,
@@ -112,7 +112,7 @@ export function registerTreatmentRoutes(app: Express, ctx: HttpContext): void {
         emptyState,
         treatments,
         grouped: groupByCategory(treatments),
-        carePlanGenerator: CARE_PLAN_GENERATOR_UNAVAILABLE,
+        carePlanGenerator: CARE_PLAN_GENERATOR,
       });
     },
   );
@@ -141,7 +141,7 @@ export function registerTreatmentRoutes(app: Express, ctx: HttpContext): void {
       });
       res.json({
         treatment: publicTreatment(row),
-        carePlanGenerator: CARE_PLAN_GENERATOR_UNAVAILABLE,
+        carePlanGenerator: CARE_PLAN_GENERATOR,
       });
     },
   );
