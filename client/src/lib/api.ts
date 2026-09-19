@@ -157,3 +157,55 @@ export type DashboardResponse = {
     }>;
   };
 };
+
+export type GoalStatus =
+  | "achieved"
+  | "expired"
+  | "below_target"
+  | "behind_pace"
+  | "on_pace";
+
+export type PublicGoal = {
+  id: string;
+  name: string;
+  title: string;
+  metricType: "revenue" | "visits" | "custom";
+  timePeriod: string;
+  startDate: string;
+  endDate: string;
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  unit: "usd_cents" | "count";
+  currentSource: "daily_stats" | "manual";
+  targetValue: number;
+  currentValue: number;
+  expectedValue: number;
+  target: number;
+  current: number;
+  expected: number;
+  targetDisplay: string;
+  currentDisplay: string;
+  expectedDisplay: string;
+  progressPercent: number;
+  elapsedDays: number;
+  totalDays: number;
+  daysRemaining: number;
+  status: GoalStatus;
+  statusLabel: string;
+  expectedFormula: string;
+};
+
+export type GoalsListResponse = {
+  today: string;
+  includeExpired: boolean;
+  expiredCount: number;
+  emptyState: "no_goals" | "has_data";
+  goals: PublicGoal[];
+};
+
+export type GoalMutationResponse = {
+  today: string;
+  goal: PublicGoal;
+};

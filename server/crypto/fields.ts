@@ -2,6 +2,7 @@ import { decryptAesGcm, encryptAesGcm, isAesGcmCiphertext } from "./aes-gcm";
 import type {
   PatientWrite,
   StoredDailyStat,
+  StoredGoal,
   StoredPatient,
 } from "../storage/types";
 
@@ -77,6 +78,13 @@ export function decryptStoredDailyStat(
   row: StoredDailyStat,
   key: string,
 ): StoredDailyStat {
+  return {
+    ...row,
+    notes: decryptPhiString(row.notes, key),
+  };
+}
+
+export function decryptStoredGoal(row: StoredGoal, key: string): StoredGoal {
   return {
     ...row,
     notes: decryptPhiString(row.notes, key),

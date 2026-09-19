@@ -9,7 +9,6 @@ import {
   uniqueIndex,
   varchar,
   integer,
-  real,
   date,
   boolean,
 } from "drizzle-orm/pg-core";
@@ -341,6 +340,17 @@ export const dailyStats = pgTable(
   ],
 );
 
+/**
+ * Practice goals (revenue / visits / custom).
+ *
+ * - org_id + practice_id required; no "default".
+ * - target_value is integer USD cents when metric_type = "revenue",
+ *   otherwise an integer count. See docs/WEEK7-GOALS.md.
+ * - current_value is stored only for custom metrics. Revenue and visits
+ *   are summed from daily_stats at read time (not stored, not stale).
+ * - status is derived (Achieved / Expired / Below Target / Behind Pace / On Pace).
+ * - notes: optional free-text; AES-256-GCM at rest. Treat as possible PHI.
+ */
 export const goals = pgTable(
   "goals",
   {
@@ -352,17 +362,23 @@ export const goals = pgTable(
       .notNull()
       .references(() => practices.id),
     name: text("name").notNull(),
+    // revenue | visits | custom
     metricType: text("metric_type").notNull(),
-    targetValue: real("target_value").notNull(),
-    timePeriod: text("time_period").notNull(),
+    // Integer cents for revenue; integer count otherwise.
+    targetValue: integer("target_value").notNull(),
+    // Manual current for custom only. Null for revenue/visits.
+    currentValue: integer("current_value"),
+    timePeriod: text("time_period").notNull().default("custom"),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
-    active: integer("active").notNull().default(1),
+    notes: text("notes"),
+    createdBy: varchar("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("goals_org_practice_idx").on(table.orgId, table.practiceId),
+    index("goals_practice_dates_idx").on(table.practiceId, table.startDate, table.endDate),
   ],
 );
 

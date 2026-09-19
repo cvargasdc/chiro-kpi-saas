@@ -48,6 +48,9 @@ export default function AppShell({ me, onLogout, children }: Props) {
           <NavLink href="/daily-log" current={location === "/daily-log"}>
             Daily Log
           </NavLink>
+          <NavLink href="/goals" current={location === "/goals"}>
+            Goals
+          </NavLink>
         </nav>
       </header>
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">{children}</main>

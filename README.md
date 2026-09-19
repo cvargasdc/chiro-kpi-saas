@@ -4,7 +4,7 @@ Multi-tenant practice KPI software for chiropractic clinics. This tree is a **gr
 
 **Path B:** treat patient identity, contact, clinical notes, and joinable operational rows as **ePHI from day one**.
 
-Week 6 adds the Daily Log and Practice Dashboard KPI overview (visits, revenue, office visit average) on top of Week 5 billing. Stripe checkout/portal/webhooks are unchanged. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
+Week 7 adds practice Goals (targets, linear pace, status chips) on top of Week 6 Daily Log + Dashboard KPIs. Stripe checkout/portal/webhooks are unchanged. It does **not** replace chiro-kpi.com and is **not** a HIPAA certification.
 
 ---
 
@@ -19,7 +19,8 @@ Week 6 adds the Daily Log and Practice Dashboard KPI overview (visits, revenue, 
 | Password reset + practice invites (email stub) | Live Resend (adapter documented) |
 | Stripe test-mode org subscriptions (no PHI) | Live Stripe keys / patient data in Stripe |
 | Patient CRUD stubs, isolated by practice | S3 |
-| Daily Log + Dashboard KPIs (visits, revenue, OVA) | Goals, care plans, conversion funnel, reports PDF |
+| Daily Log + Dashboard KPIs (visits, revenue, OVA) | Care plans, conversion funnel, reports PDF |
+| Goals (revenue / visits / custom) with pace status | New-patient and conversion goal types |
 | App-layer AES-256-GCM on patient email/phone/DOB + daily-log notes | Hardcoded demo secrets |
 | CSV/Excel import **placeholder only** | Any deploy to Replit or production |
 | Local Docker Postgres + backup script skeleton | GitHub holding production PHI |
@@ -27,6 +28,7 @@ Week 6 adds the Daily Log and Practice Dashboard KPI overview (visits, revenue, 
 
 Read next:
 
+- [docs/WEEK7-GOALS.md](docs/WEEK7-GOALS.md) — Goals schema, linear expected, status rules, money display
 - [docs/WEEK6-DAILY-DASHBOARD.md](docs/WEEK6-DAILY-DASHBOARD.md) — Daily Log, KPI formulas, period definitions
 - [docs/WEEK5-BILLING.md](docs/WEEK5-BILLING.md) — Stripe test mode, webhooks, no-PHI rule
 - [docs/WEEK4-HARDENING.md](docs/WEEK4-HARDENING.md) — headers, encryption, audit API, backups, CI
@@ -65,13 +67,13 @@ npm run dev
 
 `npm run dev` auto-loads `.env` via `dotenv` (development only). Values already set in the environment are **not** overridden, so you do not need `source .env`. Production does not read a `.env` file.
 
-Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows KPI cards (from the Daily Log), plan, and subscription status. **Daily Log** is in the nav.
+Open [http://localhost:5000](http://localhost:5000). Register a user — that creates an organization, a practice, and a local billing trial. The dashboard shows KPI cards (from the Daily Log), goal pace, plan, and subscription status. **Daily Log** and **Goals** are in the nav.
 
 ### Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), daily log, dashboard math, schema tests |
+| `npm test` | Isolation, auth, encryption, audit, billing (mocked Stripe), daily log, dashboard math, goals, schema tests |
 | `npm run check` | TypeScript |
 | `npm run build` | Production client bundle → `dist/public` |
 | `npm run db:push` | Push Drizzle schema to local Postgres |
@@ -93,7 +95,7 @@ To see the test fail when the filter is removed: delete the `practiceId` predica
 
 ## Audit retention
 
-`logAudit(...)` is wired into patient CRUD, daily log (create/update/delete/list/read), dashboard reads, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
+`logAudit(...)` is wired into patient CRUD, daily log (create/update/delete/list/read), goals CRUD, dashboard reads, auth (login/logout/MFA/password reset), invites, and org/practice create. Owner and admin can page `GET /api/audit-logs` (IDs + action metadata, no raw PHI). HIPAA documentation retention intent is **six years**. Automated prune is **not** enabled.
 
 ---
 

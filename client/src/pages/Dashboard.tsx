@@ -1,11 +1,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import AppShell from "../components/AppShell";
+import { Link } from "wouter";
 import {
   api,
   type BillingStatus,
   type DashboardResponse,
+  type GoalsListResponse,
   type MeResponse,
   type Patient,
+  type PublicGoal,
 } from "../lib/api";
 
 type Props = { me: MeResponse; onLogout: () => void };
@@ -38,6 +41,7 @@ export default function DashboardPage({ me, onLogout }: Props) {
   const [billingError, setBillingError] = useState("");
   const [kpis, setKpis] = useState<DashboardResponse | null>(null);
   const [kpiError, setKpiError] = useState("");
+  const [goals, setGoals] = useState<GoalsListResponse | null>(null);
   const [period, setPeriod] = useState<PeriodKey>("this_week");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -85,6 +89,9 @@ export default function DashboardPage({ me, onLogout }: Props) {
     loadDashboard("this_week").catch((err) =>
       setKpiError(err instanceof Error ? err.message : "Could not load KPIs"),
     );
+    api<GoalsListResponse>("/api/goals")
+      .then(setGoals)
+      .catch(() => setGoals(null));
   }, []);
 
   async function addPatient(e: FormEvent) {
@@ -218,6 +225,8 @@ export default function DashboardPage({ me, onLogout }: Props) {
             />
           </div>
         </section>
+
+        <GoalsSummary goals={goals} />
 
         <BillingCard
           billing={billing}
@@ -456,6 +465,75 @@ function BillingCard({
         <p className="text-sm text-ink-500">Owner and admin manage billing for this organization.</p>
       )}
     </section>
+  );
+}
+
+function GoalsSummary({ goals }: { goals: GoalsListResponse | null }) {
+  const list = goals?.goals ?? [];
+  const alerts = list.filter(
+    (g) => g.status === "behind_pace" || g.status === "below_target",
+  );
+  const preview = list.filter((g) => g.status !== "expired").slice(0, 3);
+
+  return (
+    <section className="bg-white shadow-card rounded-2xl p-6 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold">Goals</h2>
+        <Link href="/goals" className="text-sm text-accent-600 font-medium">
+          View goals
+        </Link>
+      </div>
+      {alerts.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {alerts.length} goal{alerts.length === 1 ? "" : "s"} behind pace or below
+          target: {alerts.map((g) => g.name).join(", ")}.{" "}
+          <Link href="/goals" className="font-medium underline">
+            Review on Goals
+          </Link>
+        </div>
+      ) : null}
+      {preview.length === 0 ? (
+        <p className="text-sm text-ink-500">
+          No active goals yet.{" "}
+          <Link href="/goals" className="text-accent-600 font-medium">
+            Set a goal
+          </Link>{" "}
+          to track revenue or visits against the daily log.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {preview.map((goal) => (
+            <DashboardGoalRow key={goal.id} goal={goal} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function DashboardGoalRow({ goal }: { goal: PublicGoal }) {
+  const width = Math.max(0, Math.min(100, goal.progressPercent));
+  const chip =
+    goal.status === "behind_pace" || goal.status === "below_target"
+      ? "bg-amber-100 text-amber-900"
+      : goal.status === "achieved"
+        ? "bg-emerald-100 text-emerald-800"
+        : "bg-clinical-100 text-clinical-700";
+  return (
+    <li>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium truncate">{goal.name}</span>
+        <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${chip}`}>
+          {goal.statusLabel}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-1.5 rounded-full bg-accent-500" style={{ width: `${width}%` }} />
+      </div>
+      <p className="mt-1 text-xs text-ink-500">
+        {goal.currentDisplay} of {goal.targetDisplay}
+      </p>
+    </li>
   );
 }
 

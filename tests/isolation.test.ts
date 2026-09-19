@@ -210,3 +210,68 @@ describe("Practice A cannot read Practice B daily log", () => {
     ).rejects.toBeInstanceOf(TenantScopeError);
   });
 });
+
+describe("Practice A cannot read Practice B goals", () => {
+  it("listGoals and getGoal stay practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+
+    await store.createGoal(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      {
+        name: "A revenue",
+        metricType: "revenue",
+        targetValue: 100000,
+        startDate: "2026-09-01",
+        endDate: "2026-09-30",
+      },
+    );
+    await store.createGoal(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      {
+        name: "B revenue",
+        metricType: "revenue",
+        targetValue: 200000,
+        startDate: "2026-09-01",
+        endDate: "2026-09-30",
+      },
+    );
+    await store.createGoal(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      {
+        name: "A2 visits",
+        metricType: "visits",
+        targetValue: 50,
+        startDate: "2026-09-01",
+        endDate: "2026-09-30",
+      },
+    );
+
+    const listA = await store.listGoals({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listA).toHaveLength(1);
+    expect(listA[0].name).toBe("A revenue");
+
+    const stolen = await store.getGoal(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      listA[0].id,
+    );
+    expect(stolen?.name).toBe("A revenue");
+
+    const unscoped = store.listGoalsMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listGoals({ orgId: orgA.id } as { orgId: string; practiceId: string }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});

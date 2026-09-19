@@ -4,6 +4,7 @@ import * as schema from "@shared/schema";
 import type { MembershipRole } from "@shared/roles";
 import {
   decryptStoredDailyStat,
+  decryptStoredGoal,
   decryptStoredPatient,
   encryptPhiString,
 } from "../crypto/fields";
@@ -15,11 +16,14 @@ import type {
   DailyStatPatch,
   DailyStatRange,
   DailyStatWrite,
+  GoalPatch,
+  GoalWrite,
   NewAuditLog,
   OrganizationPatch,
   PatientWrite,
   StoredAuditLog,
   StoredDailyStat,
+  StoredGoal,
   StoredInvitation,
   StoredOrgMembership,
   StoredOrganization,
@@ -107,6 +111,25 @@ function isPgUniqueViolation(err: unknown): boolean {
   return false;
 }
 
+function mapGoalRow(row: schema.Goal): StoredGoal {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    name: row.name,
+    metricType: row.metricType,
+    targetValue: row.targetValue,
+    currentValue: row.currentValue ?? null,
+    timePeriod: row.timePeriod,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    notes: row.notes ?? null,
+    createdBy: row.createdBy ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function mapDailyStatRow(row: schema.DailyStat): StoredDailyStat {
   return {
     id: row.id,
@@ -155,6 +178,10 @@ export class DrizzleStorage implements AppStorage {
 
   private revealDailyStat(row: schema.DailyStat): StoredDailyStat {
     return decryptStoredDailyStat(mapDailyStatRow(row), this.phiEncryptionKey);
+  }
+
+  private revealGoal(row: schema.Goal): StoredGoal {
+    return decryptStoredGoal(mapGoalRow(row), this.phiEncryptionKey);
   }
 
   async createUser(input: {
@@ -851,6 +878,110 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning({ id: schema.dailyStats.id });
+    return deleted.length > 0;
+  }
+
+  async createGoal(scope: TenantScope, input: GoalWrite): Promise<StoredGoal> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .insert(schema.goals)
+      .values({
+        orgId,
+        practiceId,
+        name: input.name,
+        metricType: input.metricType,
+        targetValue: input.targetValue,
+        currentValue: input.currentValue ?? null,
+        timePeriod: input.timePeriod ?? "custom",
+        startDate: input.startDate,
+        endDate: input.endDate,
+        notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+        createdBy: input.createdBy ?? null,
+      })
+      .returning();
+    return this.revealGoal(row);
+  }
+
+  async getGoal(scope: TenantScope, id: string): Promise<StoredGoal | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.goals)
+      .where(
+        and(
+          eq(schema.goals.id, id),
+          eq(schema.goals.orgId, orgId),
+          eq(schema.goals.practiceId, practiceId),
+        ),
+      )
+      .limit(1);
+    return row ? this.revealGoal(row) : undefined;
+  }
+
+  async listGoals(scope: TenantScope): Promise<StoredGoal[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const rows = await this.db
+      .select()
+      .from(schema.goals)
+      .where(
+        and(eq(schema.goals.orgId, orgId), eq(schema.goals.practiceId, practiceId)),
+      )
+      .orderBy(
+        desc(schema.goals.endDate),
+        desc(schema.goals.startDate),
+        schema.goals.name,
+      );
+    return rows.map((row) => this.revealGoal(row));
+  }
+
+  async updateGoal(
+    scope: TenantScope,
+    id: string,
+    input: GoalPatch,
+  ): Promise<StoredGoal | undefined> {
+    const existing = await this.getGoal(scope, id);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.goals)
+      .set({
+        name: input.name ?? existing.name,
+        metricType: input.metricType ?? existing.metricType,
+        targetValue: input.targetValue ?? existing.targetValue,
+        currentValue:
+          input.currentValue === undefined ? existing.currentValue : input.currentValue,
+        timePeriod: input.timePeriod ?? existing.timePeriod,
+        startDate: input.startDate ?? existing.startDate,
+        endDate: input.endDate ?? existing.endDate,
+        notes:
+          input.notes === undefined
+            ? undefined
+            : encryptPhiString(input.notes, this.phiEncryptionKey),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.goals.id, id),
+          eq(schema.goals.orgId, orgId),
+          eq(schema.goals.practiceId, practiceId),
+        ),
+      )
+      .returning();
+    return row ? this.revealGoal(row) : undefined;
+  }
+
+  async deleteGoal(scope: TenantScope, id: string): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.goals)
+      .where(
+        and(
+          eq(schema.goals.id, id),
+          eq(schema.goals.orgId, orgId),
+          eq(schema.goals.practiceId, practiceId),
+        ),
+      )
+      .returning({ id: schema.goals.id });
     return deleted.length > 0;
   }
 

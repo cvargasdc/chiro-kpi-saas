@@ -136,6 +136,46 @@ export type DailyStatRange = {
   to?: string;
 };
 
+export type StoredGoal = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  name: string;
+  metricType: string;
+  targetValue: number;
+  currentValue: number | null;
+  timePeriod: string;
+  startDate: string;
+  endDate: string;
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type GoalWrite = {
+  name: string;
+  metricType: string;
+  targetValue: number;
+  currentValue?: number | null;
+  timePeriod?: string;
+  startDate: string;
+  endDate: string;
+  notes?: string | null;
+  createdBy?: string | null;
+};
+
+export type GoalPatch = Partial<{
+  name: string;
+  metricType: string;
+  targetValue: number;
+  currentValue: number | null;
+  timePeriod: string;
+  startDate: string;
+  endDate: string;
+  notes: string | null;
+}>;
+
 export type StoredAuditLog = {
   id: string;
   orgId: string;
@@ -285,6 +325,16 @@ export interface AppStorage {
   ): Promise<StoredDailyStat | undefined>;
   deleteDailyStatByDate(scope: TenantScope, date: string): Promise<boolean>;
 
+  createGoal(scope: TenantScope, input: GoalWrite): Promise<StoredGoal>;
+  getGoal(scope: TenantScope, id: string): Promise<StoredGoal | undefined>;
+  listGoals(scope: TenantScope): Promise<StoredGoal[]>;
+  updateGoal(
+    scope: TenantScope,
+    id: string,
+    input: GoalPatch,
+  ): Promise<StoredGoal | undefined>;
+  deleteGoal(scope: TenantScope, id: string): Promise<boolean>;
+
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
   listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
   countAuditLogs(scope: TenantScope): Promise<number>;
@@ -337,4 +387,5 @@ export interface AppStorage {
 export interface IsolationProbe {
   listPatientsMissingPracticeFilter(orgId: string): StoredPatient[];
   listDailyStatsMissingPracticeFilter(orgId: string): StoredDailyStat[];
+  listGoalsMissingPracticeFilter(orgId: string): StoredGoal[];
 }

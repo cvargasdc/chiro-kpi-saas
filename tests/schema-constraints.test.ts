@@ -70,6 +70,18 @@ describe("Path B schema constraints", () => {
     expect(dailyStats.revenueCents.notNull).toBe(true);
   });
 
+  it("stores goals with integer targets, optional manual current, and createdBy", () => {
+    expect(SCHEMA).toMatch(/targetValue:\s*integer\("target_value"\)/);
+    expect(SCHEMA).toMatch(/currentValue:\s*integer\("current_value"\)/);
+    expect(SCHEMA).toMatch(/createdBy:\s*varchar\("created_by"\)/);
+    expect(SCHEMA).toMatch(/USD cents when metric_type = "revenue"/);
+    expect(goals.targetValue.notNull).toBe(true);
+    expect(goals.orgId.notNull).toBe(true);
+    expect(goals.practiceId.notNull).toBe(true);
+    const goalsTable = SCHEMA.slice(SCHEMA.indexOf("export const goals = pgTable"));
+    expect(goalsTable).not.toMatch(/active:\s*integer\("active"\)/);
+  });
+
   it("does not ship ChiroTouch parsers", () => {
     expect(existsSync("server/chirotouch-parser.ts")).toBe(false);
     expect(existsSync("server/spaa-parser.ts")).toBe(false);
