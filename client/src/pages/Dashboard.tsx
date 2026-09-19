@@ -1,10 +1,31 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "wouter";
-import { api, type BillingStatus, type MeResponse, type Patient } from "../lib/api";
+import AppShell from "../components/AppShell";
+import {
+  api,
+  type BillingStatus,
+  type DashboardResponse,
+  type MeResponse,
+  type Patient,
+} from "../lib/api";
 
 type Props = { me: MeResponse; onLogout: () => void };
 
 type Invite = { id: string; email: string; role: string; expiresAt: string };
+type PeriodKey = "this_week" | "this_month" | "custom";
+
+function money(value: number | null): string {
+  if (value == null) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
+}
+
+function formatChange(value: number | null): string {
+  if (value == null) return "No baseline";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value}% vs prior period`;
+}
 
 export default function DashboardPage({ me, onLogout }: Props) {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -15,7 +36,11 @@ export default function DashboardPage({ me, onLogout }: Props) {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [billingError, setBillingError] = useState("");
-  const practiceName = me.active?.practiceName ?? "No practice selected";
+  const [kpis, setKpis] = useState<DashboardResponse | null>(null);
+  const [kpiError, setKpiError] = useState("");
+  const [period, setPeriod] = useState<PeriodKey>("this_week");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const canWrite = me.active?.role && me.active.role !== "readonly";
   const canInvite = me.active?.role === "owner" || me.active?.role === "admin";
   const canManageBilling = canInvite;
@@ -38,16 +63,29 @@ export default function DashboardPage({ me, onLogout }: Props) {
     setBilling(data);
   }
 
+  async function loadDashboard(nextPeriod = period) {
+    const params = new URLSearchParams({ period: nextPeriod });
+    if (nextPeriod === "custom") {
+      if (!customFrom || !customTo) return;
+      params.set("from", customFrom);
+      params.set("to", customTo);
+    }
+    const data = await api<DashboardResponse>(`/api/dashboard?${params}`);
+    setKpis(data);
+    if (nextPeriod !== "custom") {
+      setCustomFrom(data.period.from);
+      setCustomTo(data.period.to);
+    }
+  }
+
   useEffect(() => {
     loadPatients().catch(() => setPatients([]));
     loadInvites().catch(() => setInvites([]));
     loadBilling().catch(() => setBilling(null));
+    loadDashboard("this_week").catch((err) =>
+      setKpiError(err instanceof Error ? err.message : "Could not load KPIs"),
+    );
   }, []);
-
-  async function logout() {
-    await api("/api/auth/logout", { method: "POST" });
-    onLogout();
-  }
 
   async function addPatient(e: FormEvent) {
     e.preventDefault();
@@ -65,35 +103,120 @@ export default function DashboardPage({ me, onLogout }: Props) {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs tracking-[0.2em] uppercase text-ink-500">Chiro-KPI</p>
-            <h1 className="text-xl font-semibold">{practiceName}</h1>
+    <AppShell me={me} onLogout={onLogout}>
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Practice dashboard</h2>
+              <p className="text-sm text-ink-500">
+                {kpis
+                  ? `${kpis.period.label} · compared with ${kpis.comparisonLabel.toLowerCase()} (${kpis.previousFrom}–${kpis.previousTo})`
+                  : "Visits, revenue, and office visit average from the daily log."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(["this_week", "this_month", "custom"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setPeriod(key);
+                    setKpiError("");
+                    if (key !== "custom") {
+                      loadDashboard(key).catch((err) =>
+                        setKpiError(err instanceof Error ? err.message : "Could not load KPIs"),
+                      );
+                    }
+                  }}
+                  className={
+                    period === key
+                      ? "rounded-lg bg-clinical-100 text-clinical-700 px-3 py-1.5 text-sm font-medium"
+                      : "rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
+                  }
+                >
+                  {key === "this_week" ? "This week" : key === "this_month" ? "This month" : "Custom"}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-ink-500">
-              {me.user.displayName} · {me.active?.role ?? "—"}
-            </span>
-            <Link href="/mfa/enroll" className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50">
-              {me.user.mfa.enabled ? "MFA on" : "Enable MFA"}
-            </Link>
-            <button
-              onClick={logout}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+          {period === "custom" ? (
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setKpiError("");
+                loadDashboard("custom").catch((err) =>
+                  setKpiError(err instanceof Error ? err.message : "Could not load KPIs"),
+                );
+              }}
             >
-              Sign out
-            </button>
+              <label className="text-sm">
+                <span className="block text-ink-500 mb-1">From</span>
+                <input
+                  type="date"
+                  className="rounded-lg border border-slate-200 px-3 py-2"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  required
+                />
+              </label>
+              <label className="text-sm">
+                <span className="block text-ink-500 mb-1">To</span>
+                <input
+                  type="date"
+                  className="rounded-lg border border-slate-200 px-3 py-2"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  required
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-lg bg-accent-500 text-white px-4 py-2 text-sm font-medium hover:bg-accent-600"
+              >
+                Apply
+              </button>
+            </form>
+          ) : null}
+          {kpiError ? <p className="text-sm text-red-700">{kpiError}</p> : null}
+          {kpis?.emptyStateCopy ? (
+            <p className="text-sm text-ink-500">{kpis.emptyStateCopy}</p>
+          ) : null}
+          {kpis && kpis.anomalies.revenueWithoutVisits.length > 0 ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {kpis.anomalies.revenueWithoutVisits.length} day
+              {kpis.anomalies.revenueWithoutVisits.length === 1 ? "" : "s"} in this
+              period have revenue with zero visits.
+            </div>
+          ) : null}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard
+              label="Patient visits"
+              value={kpis ? String(kpis.kpis.visits.value) : "—"}
+              change={kpis ? formatChange(kpis.kpis.visits.percentChange) : ""}
+            />
+            <KpiCard
+              label="Revenue"
+              value={kpis ? money(kpis.kpis.revenue.value) : "—"}
+              change={kpis ? formatChange(kpis.kpis.revenue.percentChange) : ""}
+            />
+            <KpiCard
+              label="Office visit average"
+              value={kpis ? money(kpis.kpis.officeVisitAverage.value) : "—"}
+              change={
+                kpis
+                  ? kpis.kpis.officeVisitAverage.value == null
+                    ? kpis.kpis.officeVisitAverage.explanation
+                    : formatChange(kpis.kpis.officeVisitAverage.percentChange)
+                  : ""
+              }
+            />
+            <KpiCard
+              label="New patients / conversion"
+              value="Not available"
+              change={kpis?.kpis.newPatients.reason ?? "Conversion fields are not in this release."}
+            />
           </div>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <section className="grid sm:grid-cols-3 gap-4">
-          <Stat label="Practice" value={practiceName} />
-          <Stat label="Organization" value={me.active?.orgName ?? "—"} />
-          <Stat label="Patients" value={String(patients.length)} />
         </section>
 
         <BillingCard
@@ -158,8 +281,7 @@ export default function DashboardPage({ me, onLogout }: Props) {
             }}
           />
         ) : null}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -337,11 +459,20 @@ function BillingCard({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function KpiCard({
+  label,
+  value,
+  change,
+}: {
+  label: string;
+  value: string;
+  change: string;
+}) {
   return (
     <div className="bg-white shadow-card rounded-2xl p-5">
       <p className="text-xs uppercase tracking-wide text-ink-500">{label}</p>
       <p className="mt-1 text-lg font-semibold truncate">{value}</p>
+      {change ? <p className="mt-1 text-xs text-ink-500 leading-snug">{change}</p> : null}
     </div>
   );
 }

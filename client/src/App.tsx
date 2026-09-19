@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import DashboardPage from "./pages/Dashboard";
+import DailyLogPage from "./pages/DailyLog";
 import ForgotPasswordPage from "./pages/ForgotPassword";
 import ResetPasswordPage from "./pages/ResetPassword";
 import MfaVerifyPage from "./pages/MfaVerify";
@@ -52,12 +53,29 @@ export default function App() {
       <Route path="/mfa/enroll">
         {me ? <MfaEnrollPage /> : <Redirect to="/login" />}
       </Route>
-      <Route>
+      <Route path="/daily-log">
+        {me ? (
+          <DailyLogPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route path="/dashboard">
         {me ? (
           <DashboardPage me={me} onLogout={() => setMe(null)} />
         ) : (
           <Redirect to="/login" />
         )}
+      </Route>
+      <Route path="/">
+        {me ? (
+          <DashboardPage me={me} onLogout={() => setMe(null)} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+      <Route>
+        {me ? <Redirect to="/" /> : <Redirect to="/login" />}
       </Route>
     </Switch>
   );

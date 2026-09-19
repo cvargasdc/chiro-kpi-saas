@@ -1,5 +1,9 @@
 import { decryptAesGcm, encryptAesGcm, isAesGcmCiphertext } from "./aes-gcm";
-import type { PatientWrite, StoredPatient } from "../storage/types";
+import type {
+  PatientWrite,
+  StoredDailyStat,
+  StoredPatient,
+} from "../storage/types";
 
 /**
  * App-layer AES-256-GCM for sensitive string fields.
@@ -66,5 +70,15 @@ export function decryptStoredPatient(row: StoredPatient, key: string): StoredPat
     email: decryptPhiString(row.email, key),
     phone: decryptPhiString(row.phone, key),
     dateOfBirth: decryptPhiString(row.dateOfBirth, key),
+  };
+}
+
+export function decryptStoredDailyStat(
+  row: StoredDailyStat,
+  key: string,
+): StoredDailyStat {
+  return {
+    ...row,
+    notes: decryptPhiString(row.notes, key),
   };
 }

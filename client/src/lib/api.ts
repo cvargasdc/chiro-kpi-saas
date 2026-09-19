@@ -68,3 +68,92 @@ export type BillingStatus = {
   entitled: boolean;
   enforce: boolean;
 };
+
+export type DailyLogEntry = {
+  id: string;
+  date: string;
+  visits: number;
+  revenueCents: number;
+  revenue: number;
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyLogWarning = {
+  code: string;
+  message: string;
+  date?: string;
+};
+
+export type DailyLogListResponse = {
+  today: string;
+  from: string;
+  to: string;
+  entries: DailyLogEntry[];
+  emptyState: "no_entries" | "zeros_recorded" | "has_data";
+  warnings: DailyLogWarning[];
+};
+
+export type DailyLogMutationResponse = {
+  today: string;
+  entry: DailyLogEntry;
+  warnings: DailyLogWarning[];
+};
+
+export type UnavailableKpi = {
+  available: false;
+  reason: string;
+};
+
+export type DashboardResponse = {
+  today: string;
+  period: {
+    key: string;
+    from: string;
+    to: string;
+    label: string;
+    dayCount: number;
+  };
+  comparisonLabel: string;
+  previousFrom: string;
+  previousTo: string;
+  emptyState: "no_entries" | "zeros_recorded" | "has_data";
+  emptyStateCopy: string | null;
+  kpis: {
+    visits: {
+      value: number;
+      previousValue: number;
+      percentChange: number | null;
+      emptyState: string;
+      unit: string;
+    };
+    revenue: {
+      value: number;
+      previousValue: number;
+      valueCents: number;
+      previousValueCents: number;
+      percentChange: number | null;
+      emptyState: string;
+      unit: string;
+    };
+    officeVisitAverage: {
+      value: number | null;
+      previousValue: number | null;
+      percentChange: number | null;
+      explanation: string;
+      unit: string;
+    };
+    newPatients: UnavailableKpi;
+    conversion: UnavailableKpi;
+  };
+  anomalies: {
+    revenueWithoutVisits: Array<{
+      date: string;
+      visits: number;
+      revenue: number;
+      revenueCents: number;
+    }>;
+  };
+};

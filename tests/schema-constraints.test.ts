@@ -61,6 +61,15 @@ describe("Path B schema constraints", () => {
     expect(SCHEMA).toMatch(/mfaPendingSecretEnc|mfa_pending_secret_enc/);
   });
 
+  it("stores daily log visits + integer cents with a unique practice date", () => {
+    expect(SCHEMA).toMatch(/visits:\s*integer\("visits"\)/);
+    expect(SCHEMA).toMatch(/revenueCents:\s*integer\("revenue_cents"\)/);
+    expect(SCHEMA).toMatch(/daily_stats_practice_date_unique/);
+    expect(SCHEMA).not.toMatch(/totalAppointments/);
+    expect(dailyStats.visits.notNull).toBe(true);
+    expect(dailyStats.revenueCents.notNull).toBe(true);
+  });
+
   it("does not ship ChiroTouch parsers", () => {
     expect(existsSync("server/chirotouch-parser.ts")).toBe(false);
     expect(existsSync("server/spaa-parser.ts")).toBe(false);

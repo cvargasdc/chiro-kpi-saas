@@ -104,6 +104,38 @@ export type PatientWrite = {
   status?: string;
 };
 
+export type StoredDailyStat = {
+  id: string;
+  orgId: string;
+  practiceId: string;
+  date: string;
+  visits: number;
+  revenueCents: number;
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type DailyStatWrite = {
+  date: string;
+  visits: number;
+  revenueCents: number;
+  notes?: string | null;
+  createdBy?: string | null;
+};
+
+export type DailyStatPatch = Partial<{
+  visits: number;
+  revenueCents: number;
+  notes: string | null;
+}>;
+
+export type DailyStatRange = {
+  from?: string;
+  to?: string;
+};
+
 export type StoredAuditLog = {
   id: string;
   orgId: string;
@@ -234,6 +266,25 @@ export interface AppStorage {
   ): Promise<StoredPatient | undefined>;
   deletePatient(scope: TenantScope, id: string): Promise<boolean>;
 
+  createDailyStat(
+    scope: TenantScope,
+    input: DailyStatWrite,
+  ): Promise<StoredDailyStat>;
+  getDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+  ): Promise<StoredDailyStat | undefined>;
+  listDailyStats(
+    scope: TenantScope,
+    range?: DailyStatRange,
+  ): Promise<StoredDailyStat[]>;
+  updateDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+    input: DailyStatPatch,
+  ): Promise<StoredDailyStat | undefined>;
+  deleteDailyStatByDate(scope: TenantScope, date: string): Promise<boolean>;
+
   createAuditLog(input: NewAuditLog): Promise<StoredAuditLog>;
   listAuditLogs(scope: TenantScope, query?: AuditLogQuery): Promise<StoredAuditLog[]>;
   countAuditLogs(scope: TenantScope): Promise<number>;
@@ -285,4 +336,5 @@ export interface AppStorage {
  */
 export interface IsolationProbe {
   listPatientsMissingPracticeFilter(orgId: string): StoredPatient[];
+  listDailyStatsMissingPracticeFilter(orgId: string): StoredDailyStat[];
 }

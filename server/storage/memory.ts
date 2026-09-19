@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
 import {
+  decryptStoredDailyStat,
   decryptStoredPatient,
   encryptPhiString,
 } from "../crypto/fields";
+import { DuplicateDailyLogError } from "../daily-log/errors";
 import { requireOrgId, requireTenantScope, type TenantScope } from "../tenant/scope";
 import type { AuditLogQuery } from "./audit-query";
 import type {
   AppStorage,
+  DailyStatPatch,
+  DailyStatRange,
+  DailyStatWrite,
   IsolationProbe,
   NewAuditLog,
   PatientWrite,
   StoredAuditLog,
+  StoredDailyStat,
   OrganizationPatch,
   StoredInvitation,
   StoredOrgMembership,
@@ -36,6 +42,8 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
   practiceMemberships: StoredPracticeMembership[] = [];
   /** Serialized rows — email/phone/DOB are ciphertext when PHI_ENCRYPTION_KEY is set. */
   patients: StoredPatient[] = [];
+  /** Notes are ciphertext when PHI_ENCRYPTION_KEY is set. */
+  dailyStats: StoredDailyStat[] = [];
   auditLogs: StoredAuditLog[] = [];
   passwordResetTokens: StoredPasswordResetToken[] = [];
   invitations: StoredInvitation[] = [];
@@ -419,6 +427,114 @@ export class MemoryStorage implements AppStorage, IsolationProbe {
     );
     if (index === -1) return false;
     this.patients.splice(index, 1);
+    return true;
+  }
+
+  async createDailyStat(
+    scope: TenantScope,
+    input: DailyStatWrite,
+  ): Promise<StoredDailyStat> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const duplicate = this.dailyStats.some(
+      (row) =>
+        row.orgId === orgId &&
+        row.practiceId === practiceId &&
+        row.date === input.date,
+    );
+    if (duplicate) {
+      throw new DuplicateDailyLogError(input.date);
+    }
+    const row: StoredDailyStat = {
+      id: randomUUID(),
+      orgId,
+      practiceId,
+      date: input.date,
+      visits: input.visits,
+      revenueCents: input.revenueCents,
+      notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+      createdBy: input.createdBy ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    this.dailyStats.push(row);
+    return decryptStoredDailyStat(row, this.phiEncryptionKey);
+  }
+
+  async getDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+  ): Promise<StoredDailyStat | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const row = this.dailyStats.find(
+      (item) =>
+        item.orgId === orgId &&
+        item.practiceId === practiceId &&
+        item.date === date,
+    );
+    return row ? decryptStoredDailyStat(row, this.phiEncryptionKey) : undefined;
+  }
+
+  async listDailyStats(
+    scope: TenantScope,
+    range?: DailyStatRange,
+  ): Promise<StoredDailyStat[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    return this.dailyStats
+      .filter((row) => {
+        if (row.orgId !== orgId || row.practiceId !== practiceId) return false;
+        if (range?.from && row.date < range.from) return false;
+        if (range?.to && row.date > range.to) return false;
+        return true;
+      })
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map((row) => decryptStoredDailyStat(row, this.phiEncryptionKey));
+  }
+
+  /**
+   * Deliberately unscoped (org only). Test-only. NEVER wire to an HTTP route.
+   */
+  listDailyStatsMissingPracticeFilter(orgId: string): StoredDailyStat[] {
+    return this.dailyStats.filter((row) => row.orgId === orgId);
+  }
+
+  async updateDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+    input: DailyStatPatch,
+  ): Promise<StoredDailyStat | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const existing = this.dailyStats.find(
+      (row) =>
+        row.orgId === orgId &&
+        row.practiceId === practiceId &&
+        row.date === date,
+    );
+    if (!existing) return undefined;
+    if (input.visits !== undefined) existing.visits = input.visits;
+    if (input.revenueCents !== undefined) {
+      existing.revenueCents = input.revenueCents;
+    }
+    if (input.notes !== undefined) {
+      existing.notes = encryptPhiString(input.notes, this.phiEncryptionKey);
+    }
+    existing.updatedAt = now();
+    return decryptStoredDailyStat(existing, this.phiEncryptionKey);
+  }
+
+  async deleteDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const index = this.dailyStats.findIndex(
+      (row) =>
+        row.orgId === orgId &&
+        row.practiceId === practiceId &&
+        row.date === date,
+    );
+    if (index === -1) return false;
+    this.dailyStats.splice(index, 1);
     return true;
   }
 

@@ -307,6 +307,15 @@ export const patientIntakes = pgTable(
   ],
 );
 
+/**
+ * One row per practice calendar date (Daily Log).
+ *
+ * - visits: whole-number patient visits, ≥ 0
+ * - revenue_cents: integer USD cents, ≥ 0 (API exposes dollars as `revenue`)
+ * - notes: optional free-text; AES-256-GCM at rest (PHI_ENCRYPTION_KEY).
+ *   Treat as possible PHI. Audit logs record field names, never note contents.
+ * Unique (practice_id, date). org_id + practice_id required; no "default".
+ */
 export const dailyStats = pgTable(
   "daily_stats",
   {
@@ -318,14 +327,17 @@ export const dailyStats = pgTable(
       .notNull()
       .references(() => practices.id),
     date: date("date").notNull(),
-    totalAppointments: integer("total_appointments").notNull().default(0),
+    visits: integer("visits").notNull().default(0),
+    revenueCents: integer("revenue_cents").notNull().default(0),
+    // Ciphertext when PHI_ENCRYPTION_KEY is set.
     notes: text("notes"),
+    createdBy: varchar("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("daily_stats_org_practice_idx").on(table.orgId, table.practiceId),
-    index("daily_stats_practice_date_idx").on(table.practiceId, table.date),
+    uniqueIndex("daily_stats_practice_date_unique").on(table.practiceId, table.date),
   ],
 );
 

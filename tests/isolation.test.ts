@@ -163,3 +163,50 @@ describe("Practice A cannot read Practice B patients", () => {
     ).toBe(true);
   });
 });
+
+describe("Practice A cannot read Practice B daily log", () => {
+  it("listDailyStats and getDailyStatByDate stay practice-scoped", async () => {
+    const store = createMemoryStorage();
+    const orgA = await store.createOrganization({ name: "Org A" });
+    const orgB = await store.createOrganization({ name: "Org B" });
+    const practiceA = await store.createPractice({ orgId: orgA.id, name: "A" });
+    const practiceB = await store.createPractice({ orgId: orgB.id, name: "B" });
+    const practiceA2 = await store.createPractice({
+      orgId: orgA.id,
+      name: "A2",
+    });
+
+    await store.createDailyStat(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      { date: "2026-09-16", visits: 4, revenueCents: 40000 },
+    );
+    await store.createDailyStat(
+      { orgId: orgB.id, practiceId: practiceB.id },
+      { date: "2026-09-16", visits: 9, revenueCents: 90000 },
+    );
+    await store.createDailyStat(
+      { orgId: orgA.id, practiceId: practiceA2.id },
+      { date: "2026-09-16", visits: 1, revenueCents: 1000 },
+    );
+
+    const listA = await store.listDailyStats({
+      orgId: orgA.id,
+      practiceId: practiceA.id,
+    });
+    expect(listA).toHaveLength(1);
+    expect(listA[0].visits).toBe(4);
+
+    const stolen = await store.getDailyStatByDate(
+      { orgId: orgA.id, practiceId: practiceA.id },
+      "2026-09-16",
+    );
+    expect(stolen?.visits).toBe(4);
+
+    const unscoped = store.listDailyStatsMissingPracticeFilter(orgA.id);
+    expect(unscoped).toHaveLength(2);
+
+    await expect(
+      store.listDailyStats({ orgId: orgA.id } as { orgId: string; practiceId: string }),
+    ).rejects.toBeInstanceOf(TenantScopeError);
+  });
+});

@@ -1,16 +1,25 @@
-import { and, count, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, gt, isNull, lte, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 import type { MembershipRole } from "@shared/roles";
-import { decryptStoredPatient, encryptPhiString } from "../crypto/fields";
+import {
+  decryptStoredDailyStat,
+  decryptStoredPatient,
+  encryptPhiString,
+} from "../crypto/fields";
+import { DuplicateDailyLogError } from "../daily-log/errors";
 import { requireOrgId, requireTenantScope, type TenantScope } from "../tenant/scope";
 import type { AuditLogQuery } from "./audit-query";
 import type {
   AppStorage,
+  DailyStatPatch,
+  DailyStatRange,
+  DailyStatWrite,
   NewAuditLog,
   OrganizationPatch,
   PatientWrite,
   StoredAuditLog,
+  StoredDailyStat,
   StoredInvitation,
   StoredOrgMembership,
   StoredOrganization,
@@ -79,6 +88,40 @@ function isPendingInvitation(row: StoredInvitation, nowDate: Date): boolean {
   return !row.acceptedAt && !row.revokedAt && row.expiresAt.getTime() > nowDate.getTime();
 }
 
+function isPgUniqueViolation(err: unknown): boolean {
+  let current: unknown = err;
+  for (let i = 0; i < 5 && current; i += 1) {
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      "code" in current &&
+      (current as { code: string }).code === "23505"
+    ) {
+      return true;
+    }
+    current =
+      typeof current === "object" && current !== null && "cause" in current
+        ? (current as { cause: unknown }).cause
+        : null;
+  }
+  return false;
+}
+
+function mapDailyStatRow(row: schema.DailyStat): StoredDailyStat {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    practiceId: row.practiceId,
+    date: row.date,
+    visits: row.visits,
+    revenueCents: row.revenueCents,
+    notes: row.notes,
+    createdBy: row.createdBy ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function mapPatientRow(row: schema.Patient): StoredPatient {
   return {
     id: row.id,
@@ -108,6 +151,10 @@ export class DrizzleStorage implements AppStorage {
 
   private revealPatient(row: schema.Patient): StoredPatient {
     return decryptStoredPatient(mapPatientRow(row), this.phiEncryptionKey);
+  }
+
+  private revealDailyStat(row: schema.DailyStat): StoredDailyStat {
+    return decryptStoredDailyStat(mapDailyStatRow(row), this.phiEncryptionKey);
   }
 
   async createUser(input: {
@@ -687,6 +734,123 @@ export class DrizzleStorage implements AppStorage {
         ),
       )
       .returning({ id: schema.patients.id });
+    return deleted.length > 0;
+  }
+
+  async createDailyStat(
+    scope: TenantScope,
+    input: DailyStatWrite,
+  ): Promise<StoredDailyStat> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    try {
+      const [row] = await this.db
+        .insert(schema.dailyStats)
+        .values({
+          orgId,
+          practiceId,
+          date: input.date,
+          visits: input.visits,
+          revenueCents: input.revenueCents,
+          notes: encryptPhiString(input.notes ?? null, this.phiEncryptionKey),
+          createdBy: input.createdBy ?? null,
+        })
+        .returning();
+      return this.revealDailyStat(row);
+    } catch (err) {
+      if (isPgUniqueViolation(err)) {
+        throw new DuplicateDailyLogError(input.date);
+      }
+      throw err;
+    }
+  }
+
+  async getDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+  ): Promise<StoredDailyStat | undefined> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .select()
+      .from(schema.dailyStats)
+      .where(
+        and(
+          eq(schema.dailyStats.orgId, orgId),
+          eq(schema.dailyStats.practiceId, practiceId),
+          eq(schema.dailyStats.date, date),
+        ),
+      )
+      .limit(1);
+    return row ? this.revealDailyStat(row) : undefined;
+  }
+
+  async listDailyStats(
+    scope: TenantScope,
+    range?: DailyStatRange,
+  ): Promise<StoredDailyStat[]> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const filters = [
+      eq(schema.dailyStats.orgId, orgId),
+      eq(schema.dailyStats.practiceId, practiceId),
+    ];
+    if (range?.from) {
+      filters.push(gte(schema.dailyStats.date, range.from));
+    }
+    if (range?.to) {
+      filters.push(lte(schema.dailyStats.date, range.to));
+    }
+    const rows = await this.db
+      .select()
+      .from(schema.dailyStats)
+      .where(and(...filters))
+      .orderBy(desc(schema.dailyStats.date));
+    return rows.map((row) => this.revealDailyStat(row));
+  }
+
+  async updateDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+    input: DailyStatPatch,
+  ): Promise<StoredDailyStat | undefined> {
+    const existing = await this.getDailyStatByDate(scope, date);
+    if (!existing) return undefined;
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const [row] = await this.db
+      .update(schema.dailyStats)
+      .set({
+        visits: input.visits ?? existing.visits,
+        revenueCents: input.revenueCents ?? existing.revenueCents,
+        notes:
+          input.notes === undefined
+            ? undefined
+            : encryptPhiString(input.notes, this.phiEncryptionKey),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.dailyStats.orgId, orgId),
+          eq(schema.dailyStats.practiceId, practiceId),
+          eq(schema.dailyStats.date, date),
+        ),
+      )
+      .returning();
+    return row ? this.revealDailyStat(row) : undefined;
+  }
+
+  async deleteDailyStatByDate(
+    scope: TenantScope,
+    date: string,
+  ): Promise<boolean> {
+    const { orgId, practiceId } = requireTenantScope(scope);
+    const deleted = await this.db
+      .delete(schema.dailyStats)
+      .where(
+        and(
+          eq(schema.dailyStats.orgId, orgId),
+          eq(schema.dailyStats.practiceId, practiceId),
+          eq(schema.dailyStats.date, date),
+        ),
+      )
+      .returning({ id: schema.dailyStats.id });
     return deleted.length > 0;
   }
 

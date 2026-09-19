@@ -11,6 +11,8 @@ import { logError } from "./log/redact";
 import { publicAuditLog } from "./audit/public";
 import { AUDIT_PAGE_DEFAULT, AUDIT_PAGE_MAX } from "./storage/audit-query";
 import { registerAuthRoutes } from "./auth/http";
+import { registerDailyLogRoutes } from "./daily-log/http";
+import { registerDashboardRoutes } from "./dashboard/http";
 import {
   authenticate,
   getClientIp,
@@ -67,6 +69,8 @@ export function registerRoutes(app: Express, ctx: HttpContext): void {
   registerAuthRoutes(app, ctx);
   registerInviteRoutes(app, ctx);
   registerBillingRoutes(app, ctx);
+  registerDailyLogRoutes(app, ctx);
+  registerDashboardRoutes(app, ctx);
   const billingGate = requireActiveSubscription(ctx);
 
   app.post("/api/organizations", auth, async (req, res) => {
