@@ -94,11 +94,13 @@ export default function DashboardPage({ me, onLogout }: Props) {
 
   return (
     <AppShell me={me} onLogout={onLogout}>
-        <section className="space-y-4">
+        <section className="rounded-2xl border border-hero-border bg-hero px-5 sm:px-6 py-5 sm:py-6 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold">Practice dashboard</h2>
-              <p className="text-sm text-ink-500">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                Practice dashboard
+              </h2>
+              <p className="text-sm text-ink-muted mt-1">
                 {kpis
                   ? `${kpis.period.label} · compared with ${kpis.comparisonLabel.toLowerCase()} (${kpis.previousFrom}–${kpis.previousTo})`
                   : "Visits, revenue, and office visit average from the daily log."}
@@ -120,8 +122,8 @@ export default function DashboardPage({ me, onLogout }: Props) {
                   }}
                   className={
                     period === key
-                      ? "rounded-lg bg-clinical-100 text-clinical-700 px-3 py-1.5 text-sm font-medium"
-                      : "rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
+                      ? "rounded-lg bg-primary text-primary-fg px-3 py-1.5 text-sm font-semibold shadow-sm"
+                      : "rounded-lg border border-border bg-surface px-3 py-1.5 text-sm hover:bg-sidebar-hover"
                   }
                 >
                   {key === "this_week" ? "This week" : key === "this_month" ? "This month" : "Custom"}
@@ -144,7 +146,7 @@ export default function DashboardPage({ me, onLogout }: Props) {
                 <span className="block text-ink-500 mb-1">From</span>
                 <input
                   type="date"
-                  className="rounded-lg border border-slate-200 px-3 py-2"
+                  className="ck-input"
                   value={customFrom}
                   onChange={(e) => setCustomFrom(e.target.value)}
                   required
@@ -154,26 +156,32 @@ export default function DashboardPage({ me, onLogout }: Props) {
                 <span className="block text-ink-500 mb-1">To</span>
                 <input
                   type="date"
-                  className="rounded-lg border border-slate-200 px-3 py-2"
+                  className="ck-input"
                   value={customTo}
                   onChange={(e) => setCustomTo(e.target.value)}
                   required
                 />
               </label>
-              <button
-                type="submit"
-                className="rounded-lg bg-accent-500 text-white px-4 py-2 text-sm font-medium hover:bg-accent-600"
-              >
+              <button type="submit" className="ck-btn-primary">
                 Apply
               </button>
             </form>
           ) : null}
-          {kpiError ? <p className="text-sm text-red-700">{kpiError}</p> : null}
+          {kpiError ? (
+            <p className="text-sm text-[color:var(--color-danger)]">{kpiError}</p>
+          ) : null}
           {kpis?.emptyStateCopy ? (
-            <p className="text-sm text-ink-500">{kpis.emptyStateCopy}</p>
+            <p className="text-sm text-ink-muted">{kpis.emptyStateCopy}</p>
           ) : null}
           {kpis && kpis.anomalies.revenueWithoutVisits.length > 0 ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div
+              className="rounded-2xl px-4 py-3 text-sm"
+              style={{
+                border: "1px solid var(--color-warning-border)",
+                background: "var(--color-warning-soft)",
+                color: "var(--color-warning)",
+              }}
+            >
               {kpis.anomalies.revenueWithoutVisits.length} day
               {kpis.anomalies.revenueWithoutVisits.length === 1 ? "" : "s"} in this
               period have revenue with zero visits.
@@ -246,23 +254,30 @@ export default function DashboardPage({ me, onLogout }: Props) {
           </div>
         </section>
 
+        {kpis ? (
+          <div className="grid lg:grid-cols-2 gap-4">
+            <ComparisonBars kpis={kpis} />
+            <InsightsPanel kpis={kpis} />
+          </div>
+        ) : null}
+
         <GoalsSummary goals={goals} />
 
         {kpis?.onboarding ? (
-          <section className="bg-white shadow-card rounded-2xl p-6 space-y-2">
+          <section className="ck-card space-y-2">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Patient onboarding</h2>
-              <Link href="/onboarding" className="text-sm text-accent-600 font-medium">
+              <h2 className="text-lg font-bold">Patient onboarding</h2>
+              <Link href="/onboarding" className="text-sm text-primary font-semibold">
                 Open onboarding
               </Link>
             </div>
             {kpis.onboarding.emptyState === "no_assignments" ? (
-              <p className="text-sm text-ink-500">
+              <p className="text-sm text-ink-muted">
                 No onboarding checklists assigned. Incomplete count is 0 — not a
                 hidden backlog.
               </p>
             ) : kpis.onboarding.emptyState === "all_complete" ? (
-              <p className="text-sm text-ink-500">
+              <p className="text-sm text-ink-muted">
                 All {kpis.onboarding.assignedCount} assigned onboarding
                 checklists are complete.
               </p>
@@ -284,30 +299,32 @@ export default function DashboardPage({ me, onLogout }: Props) {
           onError={setBillingError}
         />
 
-        <section className="bg-white shadow-card rounded-2xl p-6 space-y-4">
+        <section className="ck-card space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Patients</h2>
-            <Link href="/patients" className="text-sm text-accent-600 font-medium">
+            <h2 className="text-lg font-bold">Patients</h2>
+            <Link href="/patients" className="text-sm text-primary font-semibold">
               View patients
             </Link>
           </div>
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+          {error ? (
+            <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
+          ) : null}
           {patients.length === 0 ? (
-            <p className="text-sm text-ink-500">
+            <p className="text-sm text-ink-muted">
               No patients in this practice yet.{" "}
-              <Link href="/patients" className="text-accent-600 font-medium">
+              <Link href="/patients" className="text-primary font-semibold">
                 Add a patient
               </Link>{" "}
               to unlock new-patient and conversion KPIs.
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-[color:var(--color-border)]">
               {patients.slice(0, 8).map((p) => (
                 <li key={p.id} className="py-2 flex justify-between gap-3 text-sm">
-                  <Link href={`/patients/${p.id}`} className="font-medium text-accent-600">
+                  <Link href={`/patients/${p.id}`} className="font-medium text-primary">
                     {p.name}
                   </Link>
-                  <span className="text-ink-500 capitalize">
+                  <span className="text-ink-muted capitalize">
                     {p.patientType}
                     {p.converted ? " · converted" : ""}
                   </span>
@@ -379,23 +396,25 @@ function TeamInvites({
   }
 
   return (
-    <section className="bg-white shadow-card rounded-2xl p-6 space-y-4">
-      <h2 className="font-semibold">Team invites</h2>
-      <p className="text-sm text-ink-500">
+    <section className="ck-card space-y-4">
+      <h2 className="text-lg font-bold">Team invites</h2>
+      <p className="text-sm text-ink-muted">
         Owner and admin only. Week 3 emails go to the in-memory/log stub, not Resend.
       </p>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
+      ) : null}
       <form onSubmit={send} className="flex flex-wrap gap-2">
         <input
           type="email"
-          className="flex-1 min-w-[12rem] rounded-lg border border-slate-200 px-3 py-2"
+          className="ck-input flex-1 min-w-[12rem]"
           placeholder="teammate@clinic.test"
           value={inviteEmail}
           onChange={(e) => onEmail(e.target.value)}
           required
         />
         <select
-          className="rounded-lg border border-slate-200 px-3 py-2"
+          className="ck-input w-auto"
           value={inviteRole}
           onChange={(e) => onRole(e.target.value)}
         >
@@ -404,17 +423,14 @@ function TeamInvites({
           <option value="staff">staff</option>
           <option value="readonly">readonly</option>
         </select>
-        <button
-          type="submit"
-          className="rounded-lg bg-accent-500 text-white px-4 py-2 font-medium hover:bg-accent-600"
-        >
+        <button type="submit" className="ck-btn-primary">
           Invite
         </button>
       </form>
       {invites.length === 0 ? (
-        <p className="text-sm text-ink-500">No pending invites.</p>
+        <p className="text-sm text-ink-muted">No pending invites.</p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-[color:var(--color-border)]">
           {invites.map((row) => (
             <li key={row.id} className="py-2 flex justify-between gap-3 text-sm">
               <span>
@@ -423,7 +439,7 @@ function TeamInvites({
               <button
                 type="button"
                 onClick={() => revoke(row.id)}
-                className="text-accent-600 font-medium"
+                className="text-primary font-semibold"
               >
                 Revoke
               </button>
@@ -470,26 +486,28 @@ function BillingCard({
   }
 
   return (
-    <section className="bg-white shadow-card rounded-2xl p-6 space-y-3">
+    <section className="ck-card space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold">Billing</h2>
-        <span className="text-xs rounded-full bg-slate-100 text-slate-700 px-2 py-1 capitalize">
+        <h2 className="text-lg font-bold">Billing</h2>
+        <span className="text-xs rounded-full bg-primary-soft text-primary px-2 py-1 capitalize font-medium">
           {status}
         </span>
       </div>
-      <p className="text-sm text-ink-500">
+      <p className="text-sm text-ink-muted">
         Plan {plan}
         {trial ? ` · trial ends ${trial}` : ""}
         {billing?.enforce ? " · enforcement on" : " · local/dev (not enforced)"}
       </p>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-[color:var(--color-danger)]">{error}</p>
+      ) : null}
       {canManage ? (
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             disabled={busy !== null}
             onClick={() => openSession("/api/billing/checkout-session")}
-            className="rounded-lg bg-accent-500 text-white px-4 py-2 font-medium hover:bg-accent-600 disabled:opacity-50"
+            className="ck-btn-primary"
           >
             {busy === "checkout" ? "Opening…" : "Subscribe"}
           </button>
@@ -497,13 +515,15 @@ function BillingCard({
             type="button"
             disabled={busy !== null}
             onClick={() => openSession("/api/billing/portal-session")}
-            className="rounded-lg border border-slate-200 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="ck-btn-ghost disabled:opacity-50"
           >
             {busy === "portal" ? "Opening…" : "Manage billing"}
           </button>
         </div>
       ) : (
-        <p className="text-sm text-ink-500">Owner and admin manage billing for this organization.</p>
+        <p className="text-sm text-ink-muted">
+          Owner and admin manage billing for this organization.
+        </p>
       )}
     </section>
   );
@@ -517,15 +537,22 @@ function GoalsSummary({ goals }: { goals: GoalsListResponse | null }) {
   const preview = list.filter((g) => g.status !== "expired").slice(0, 3);
 
   return (
-    <section className="bg-white shadow-card rounded-2xl p-6 space-y-4">
+    <section className="ck-card space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold">Goals</h2>
-        <Link href="/goals" className="text-sm text-accent-600 font-medium">
+        <h2 className="text-lg font-bold">Goals</h2>
+        <Link href="/goals" className="text-sm text-primary font-semibold">
           View goals
         </Link>
       </div>
       {alerts.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div
+          className="rounded-xl px-4 py-3 text-sm"
+          style={{
+            border: "1px solid var(--color-warning-border)",
+            background: "var(--color-warning-soft)",
+            color: "var(--color-warning)",
+          }}
+        >
           {alerts.length} goal{alerts.length === 1 ? "" : "s"} behind pace or below
           target: {alerts.map((g) => g.name).join(", ")}.{" "}
           <Link href="/goals" className="font-medium underline">
@@ -534,9 +561,9 @@ function GoalsSummary({ goals }: { goals: GoalsListResponse | null }) {
         </div>
       ) : null}
       {preview.length === 0 ? (
-        <p className="text-sm text-ink-500">
+        <p className="text-sm text-ink-muted">
           No active goals yet.{" "}
-          <Link href="/goals" className="text-accent-600 font-medium">
+          <Link href="/goals" className="text-primary font-semibold">
             Set a goal
           </Link>{" "}
           to track revenue or visits against the daily log.
@@ -556,10 +583,10 @@ function DashboardGoalRow({ goal }: { goal: PublicGoal }) {
   const width = Math.max(0, Math.min(100, goal.progressPercent));
   const chip =
     goal.status === "behind_pace" || goal.status === "below_target"
-      ? "bg-amber-100 text-amber-900"
+      ? "bg-[color:var(--color-warning-soft)] text-[color:var(--color-warning)]"
       : goal.status === "achieved"
-        ? "bg-emerald-100 text-emerald-800"
-        : "bg-clinical-100 text-clinical-700";
+        ? "bg-primary-soft text-primary"
+        : "bg-primary-soft text-primary";
   return (
     <li>
       <div className="flex items-center justify-between gap-3 text-sm">
@@ -568,10 +595,13 @@ function DashboardGoalRow({ goal }: { goal: PublicGoal }) {
           {goal.statusLabel}
         </span>
       </div>
-      <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-        <div className="h-1.5 rounded-full bg-accent-500" style={{ width: `${width}%` }} />
+      <div className="mt-1 h-1.5 rounded-full bg-sidebar overflow-hidden">
+        <div
+          className="h-1.5 rounded-full bg-primary"
+          style={{ width: `${width}%` }}
+        />
       </div>
-      <p className="mt-1 text-xs text-ink-500">
+      <p className="mt-1 text-xs text-ink-muted">
         {goal.currentDisplay} of {goal.targetDisplay}
       </p>
     </li>
@@ -588,10 +618,173 @@ function KpiCard({
   change: string;
 }) {
   return (
-    <div className="bg-white shadow-card rounded-2xl p-5">
-      <p className="text-xs uppercase tracking-wide text-ink-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold truncate">{value}</p>
-      {change ? <p className="mt-1 text-xs text-ink-500 leading-snug">{change}</p> : null}
+    <div className="ck-card p-5">
+      <p className="text-xs uppercase tracking-wide text-ink-muted font-medium">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-bold tracking-tight truncate text-ink">
+        {value}
+      </p>
+      {change ? (
+        <p className="mt-2 text-xs text-ink-muted leading-snug">{change}</p>
+      ) : null}
     </div>
+  );
+}
+
+function ComparisonBars({ kpis }: { kpis: DashboardResponse }) {
+  const rows = [
+    {
+      label: "Patient visits",
+      current: kpis.kpis.visits.value,
+      previous: kpis.kpis.visits.previousValue,
+      format: (n: number) => String(n),
+    },
+    {
+      label: "Revenue",
+      current: kpis.kpis.revenue.value,
+      previous: kpis.kpis.revenue.previousValue,
+      format: (n: number) => money(n),
+    },
+  ];
+
+  return (
+    <section className="ck-card space-y-5">
+      <div>
+        <h2 className="text-lg font-bold">Period comparison</h2>
+        <p className="text-sm text-ink-muted mt-0.5">
+          Current vs {kpis.comparisonLabel.toLowerCase()} — from existing KPI
+          totals (no extra API fields).
+        </p>
+      </div>
+      <div className="space-y-5">
+        {rows.map((row) => {
+          const max = Math.max(row.current, row.previous, 1);
+          const curPct = Math.round((row.current / max) * 100);
+          const prevPct = Math.round((row.previous / max) * 100);
+          return (
+            <div key={row.label}>
+              <div className="flex items-baseline justify-between gap-3 text-sm mb-2">
+                <span className="font-semibold">{row.label}</span>
+                <span className="text-ink-muted text-xs">
+                  {row.format(row.current)} now · {row.format(row.previous)} prior
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <BarRow label="Current" width={curPct} tone="primary" />
+                <BarRow label="Prior" width={prevPct} tone="muted" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function BarRow({
+  label,
+  width,
+  tone,
+}: {
+  label: string;
+  width: number;
+  tone: "primary" | "muted";
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-14 text-[11px] uppercase tracking-wide text-ink-muted shrink-0">
+        {label}
+      </span>
+      <div className="flex-1 h-2.5 rounded-full bg-sidebar overflow-hidden">
+        <div
+          className={
+            tone === "primary"
+              ? "h-2.5 rounded-full bg-primary"
+              : "h-2.5 rounded-full bg-ink-muted/40"
+          }
+          style={{ width: `${Math.max(2, Math.min(100, width))}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function InsightsPanel({ kpis }: { kpis: DashboardResponse }) {
+  const items: string[] = [];
+  const { visits, revenue, officeVisitAverage, newPatients, conversion } =
+    kpis.kpis;
+
+  if (visits.percentChange != null) {
+    items.push(
+      `Visits ${visits.percentChange >= 0 ? "up" : "down"} ${Math.abs(visits.percentChange)}% vs prior period.`,
+    );
+  }
+  if (revenue.percentChange != null) {
+    items.push(
+      `Revenue ${revenue.percentChange >= 0 ? "up" : "down"} ${Math.abs(revenue.percentChange)}% vs prior period.`,
+    );
+  }
+  if (officeVisitAverage.value != null) {
+    items.push(`Office visit average is ${money(officeVisitAverage.value)}.`);
+  } else {
+    items.push(officeVisitAverage.explanation);
+  }
+  if (newPatients.available) {
+    items.push(`${newPatients.value} new patients in this window.`);
+  } else {
+    items.push(newPatients.reason);
+  }
+  if (conversion.available) {
+    if (conversion.value == null) {
+      items.push("Conversion rate not yet computable for this period.");
+    } else {
+      items.push(
+        `New-patient conversion ${conversion.value}% (${conversion.convertedCount} of ${conversion.newCount}).`,
+      );
+    }
+  }
+  if (kpis.anomalies.revenueWithoutVisits.length > 0) {
+    items.push(
+      `${kpis.anomalies.revenueWithoutVisits.length} day(s) logged revenue with zero visits.`,
+    );
+  }
+  if (kpis.onboarding) {
+    if (kpis.onboarding.emptyState === "has_incomplete") {
+      items.push(
+        `${kpis.onboarding.incompleteCount} onboarding checklist(s) still incomplete.`,
+      );
+    } else if (kpis.onboarding.emptyState === "all_complete") {
+      items.push("All assigned onboarding checklists are complete.");
+    }
+  }
+
+  return (
+    <section className="ck-card space-y-4">
+      <div>
+        <h2 className="text-lg font-bold">Insights</h2>
+        <p className="text-sm text-ink-muted mt-0.5">
+          Derived from the same dashboard payload as the KPI cards.
+        </p>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-ink-muted">No insights yet for this period.</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {items.slice(0, 6).map((line) => (
+            <li
+              key={line}
+              className="flex gap-2.5 text-sm leading-snug text-ink"
+            >
+              <span
+                className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0"
+                aria-hidden="true"
+              />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

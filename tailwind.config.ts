@@ -2,31 +2,53 @@ import type { Config } from "tailwindcss";
 
 export default {
   content: ["./client/index.html", "./client/src/**/*.{js,ts,jsx,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        ink: {
-          950: "#0b1220",
-          900: "#111827",
-          700: "#334155",
-          500: "#64748b",
+        canvas: "var(--color-canvas)",
+        surface: "var(--color-surface)",
+        sidebar: {
+          DEFAULT: "var(--color-sidebar)",
+          hover: "var(--color-sidebar-hover)",
         },
+        border: "var(--color-border)",
+        ink: {
+          DEFAULT: "var(--color-text)",
+          muted: "var(--color-muted)",
+          // legacy aliases used across pages
+          950: "var(--color-text)",
+          900: "var(--color-text)",
+          700: "var(--color-text)",
+          500: "var(--color-muted)",
+        },
+        primary: {
+          DEFAULT: "var(--color-primary)",
+          hover: "var(--color-primary-hover)",
+          soft: "var(--color-primary-soft)",
+          fg: "var(--color-primary-fg)",
+        },
+        hero: {
+          DEFAULT: "var(--color-hero)",
+          border: "var(--color-hero-border)",
+        },
+        // Back-compat for existing class names during Path B restyle
         clinical: {
-          50: "#f4f7fb",
-          100: "#e8eef6",
-          600: "#1f4e79",
-          700: "#163a5c",
+          50: "var(--color-canvas)",
+          100: "var(--color-primary-soft)",
+          600: "var(--color-primary)",
+          700: "var(--color-primary-hover)",
         },
         accent: {
-          500: "#0f766e",
-          600: "#0d5e58",
+          500: "var(--color-primary)",
+          600: "var(--color-primary-hover)",
         },
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06)",
+        card: "var(--shadow-card)",
       },
     },
   },

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,6 +8,15 @@
       content="Chiro-KPI — multi-tenant practice KPI software. Path B: ePHI from day one."
     />
     <title>Chiro-KPI</title>
+    <script>
+      try {
+        var t = localStorage.getItem("chiro-kpi-theme");
+        if (t === "dark") {
+          document.documentElement.classList.add("dark");
+          document.documentElement.dataset.theme = "dark";
+        }
+      } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,7 +24,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="bg-clinical-50 text-ink-900 antialiased">
+  <body class="bg-canvas text-ink antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

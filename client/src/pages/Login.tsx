@@ -37,31 +37,31 @@ export default function LoginPage({ onAuthed }: Props) {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      <aside className="hidden lg:flex flex-col justify-between bg-clinical-700 text-white p-12">
+    <div className="min-h-screen grid lg:grid-cols-2 bg-canvas">
+      <aside className="hidden lg:flex flex-col justify-between bg-primary p-12 text-primary-fg">
         <div>
-          <p className="text-sm tracking-[0.2em] uppercase text-white/70">Chiro-KPI</p>
-          <h1 className="mt-6 text-4xl font-semibold leading-tight">
+          <p className="text-sm tracking-[0.2em] uppercase opacity-80">Chiro-KPI</p>
+          <h1 className="mt-6 text-4xl font-bold leading-tight">
             Practice metrics,
             <br />
             built for ePHI.
           </h1>
-          <p className="mt-4 max-w-md text-white/80">
+          <p className="mt-4 max-w-md opacity-90">
             Path B foundation: multi-tenant isolation, audit logging, TOTP MFA,
             and no OpenAI subprocessor.
           </p>
         </div>
-        <p className="text-sm text-white/60">For Chris Vargas · local rebuild only</p>
+        <p className="text-sm opacity-70">For Chris Vargas · local rebuild only</p>
       </aside>
 
       <main className="flex items-center justify-center p-6">
         <form
           onSubmit={onSubmit}
-          className="w-full max-w-md bg-white shadow-card rounded-2xl p-8 space-y-5"
+          className="ck-card w-full max-w-md p-8 space-y-5"
         >
           <div>
-            <h2 className="text-2xl font-semibold">Sign in</h2>
-            <p className="text-sm text-ink-500 mt-1">
+            <h2 className="text-2xl font-bold">Sign in</h2>
+            <p className="text-sm text-ink-muted mt-1">
               Email or username, plus your password.
             </p>
           </div>
@@ -73,7 +73,7 @@ export default function LoginPage({ onAuthed }: Props) {
           <label className="block space-y-1">
             <span className="text-sm font-medium">Email or username</span>
             <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="ck-input"
               value={login}
               onChange={(e) => setLogin(e.target.value)}
               autoComplete="username"
@@ -84,7 +84,7 @@ export default function LoginPage({ onAuthed }: Props) {
             <span className="text-sm font-medium">Password</span>
             <input
               type="password"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="ck-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -94,18 +94,18 @@ export default function LoginPage({ onAuthed }: Props) {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-lg bg-accent-500 text-white py-2.5 font-medium hover:bg-accent-600 disabled:opacity-60"
+            className="ck-btn-primary w-full py-2.5 disabled:opacity-60"
           >
             {pending ? "Signing in…" : "Sign in"}
           </button>
-          <p className="text-sm text-ink-500">
-            <Link href="/forgot-password" className="text-accent-600 font-medium">
+          <p className="text-sm text-ink-muted">
+            <Link href="/forgot-password" className="text-primary font-semibold">
               Forgot password
             </Link>
           </p>
-          <p className="text-sm text-ink-500">
+          <p className="text-sm text-ink-muted">
             New practice?{" "}
-            <Link href="/register" className="text-accent-600 font-medium">
+            <Link href="/register" className="text-primary font-semibold">
               Create an account
             </Link>
           </p>

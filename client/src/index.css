@@ -2,6 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Path B locked visual: "D light" (default) + refined dark alternate.
+  Tokens drive Tailwind color aliases (see tailwind.config.ts).
+*/
+
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #f8f7f5;
+  --color-surface: #ffffff;
+  --color-sidebar: #e8ece6;
+  --color-sidebar-hover: #dde4db;
+  --color-border: #e2e5df;
+  --color-text: #111827;
+  --color-muted: #6b7280;
+  --color-primary: #10b981;
+  --color-primary-hover: #059669;
+  --color-primary-soft: #d1fae5;
+  --color-primary-fg: #ffffff;
+  --color-hero: #ecfdf5;
+  --color-hero-border: #a7f3d0;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-warning: #92400e;
+  --color-warning-soft: #fffbeb;
+  --color-warning-border: #fde68a;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --focus-ring: #10b981;
+}
+
+html.dark,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #0f1210;
+  --color-surface: #1a1f1c;
+  --color-sidebar: #141816;
+  --color-sidebar-hover: #1e2420;
+  --color-border: #2a312c;
+  --color-text: #f3f4f6;
+  --color-muted: #9ca3af;
+  --color-primary: #34d399;
+  --color-primary-hover: #10b981;
+  --color-primary-soft: #064e3b;
+  --color-primary-fg: #042f2e;
+  --color-hero: #0d2818;
+  --color-hero-border: #14532d;
+  --color-danger: #fca5a5;
+  --color-danger-soft: #450a0a;
+  --color-warning: #fcd34d;
+  --color-warning-soft: #451a03;
+  --color-warning-border: #78350f;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --focus-ring: #34d399;
+}
+
 html,
 body,
 #root {
@@ -10,10 +65,64 @@ body,
 
 body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  background-color: var(--color-canvas);
+  color: var(--color-text);
 }
 
 input:focus,
-button:focus-visible {
-  outline: 2px solid #0f766e;
+select:focus,
+textarea:focus,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+@layer components {
+  .ck-card {
+    @apply rounded-2xl p-6;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border);
+  }
+
+  .ck-btn-primary {
+    @apply rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
+    background: var(--color-primary);
+    color: var(--color-primary-fg);
+  }
+
+  .ck-btn-primary:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+  }
+
+  .ck-btn-ghost {
+    @apply rounded-lg px-3 py-1.5 text-sm transition-colors;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .ck-btn-ghost:hover {
+    background: var(--color-sidebar-hover);
+  }
+
+  .ck-input {
+    @apply w-full rounded-lg px-3 py-2 text-sm;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
