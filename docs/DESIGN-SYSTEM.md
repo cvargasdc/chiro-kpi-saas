@@ -37,7 +37,7 @@ Tailwind aliases (`canvas`, `surface`, `sidebar`, `border`, `ink`, `primary`, `h
 
 ## Theme toggle
 
-- **Provider:** `ThemeProvider` wraps the app in `client/src/main.tsx`.
+- **Provider:** `ThemeProvider` / `useTheme` live in `client/src/components/theme-context.tsx` (single Context module) and wrap the app in `client/src/main.tsx`.
 - **Persistence:** `localStorage` key `chiro-kpi-theme` (`light` \| `dark`).
 - **Default:** `light` when missing or invalid.
 - **Apply:** `dark` class + `data-theme` on `<html>` (Tailwind `darkMode: "class"`).
