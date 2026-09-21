@@ -14,3 +14,14 @@ coverage/
 tmp/
 .cache/
 backups/
+
+# Terraform (infra/staging) — never commit state or real tfvars
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/crash.log
+infra/**/crash.*.log
+infra/**/override.tf
+infra/**/*_override.tf
+infra/**/*.tfvars
+!infra/**/*.tfvars.example

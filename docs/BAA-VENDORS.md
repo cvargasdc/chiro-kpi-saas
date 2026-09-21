@@ -1,7 +1,7 @@
 # Business Associate / subprocessor inventory — Path B
 
 **Audience:** Chris Vargas  
-**As of:** Week 5 billing (2026-09-18)
+**As of:** 2026-09-21 (staging infra scaffold)
 
 Path B treats patient names, contact, DOB, condition, intake notes, and related operational rows as ePHI. Every vendor that can touch that data (or the systems that store it) needs a BAA **before** production PHI lands there.
 
@@ -13,11 +13,13 @@ This list is the **rebuild** inventory. The live Replit app is out of scope here
 
 | Vendor | Use | Touches ePHI? | BAA | Week 2 status |
 |--------|-----|---------------|-----|----------------|
-| **AWS** | App hosting (e.g. App Runner), RDS PostgreSQL, S3 (later), Secrets Manager, CloudWatch, RDS snapshots | Yes — primary store and backups | AWS HIPAA BAA (Artifact). Signing the BAA does **not** make the app compliant by itself. | Not deployed from this repo. Use private RDS, encryption at rest (KMS), TLS in transit, no public DB. App-layer AES-256-GCM on selected patient fields is extra, not a substitute. Secrets Manager name map: `docs/SECRETS.md`. |
+| **AWS** | App hosting (App Runner), RDS PostgreSQL, S3 (uploads stub), Secrets Manager, CloudWatch, RDS snapshots, ECR, KMS | Yes — primary store and backups | AWS HIPAA BAA (Artifact) — **Active** on the staging/production account (user-confirmed). Signing/activating the BAA does **not** make the app compliant by itself. | BAA gate satisfied for infra work. Terraform scaffold in `infra/staging/` (not applied from CI). Private RDS, KMS at rest, SSL required, Secrets Manager map: `docs/SECRETS.md`. Still not HIPAA certified. |
 | **Stripe** | Subscription billing | Generally **no patient PHI**. May hold org/practice billing identity (workforce). Keep PHI out of Stripe metadata. | Stripe HIPAA support is limited; treat as **no PHI in Stripe**. BAA only if a future flow sends patient-linked data (do not). | Wired in Week 5 (test mode). Customer = org name + owner workforce email + `metadata.orgId`. Webhook signature verified. Never send patient names/emails/DOB. |
 | **Resend** | Transactional email (password reset, invites, digests) | Workforce email. Digests must **not** include patient names. | Execute a BAA if any email could include ePHI. Safer: never put patient identifiers in email. | Interface + `ResendMailer` stub in Week 3. Runtime uses `LoggingMailer` / tests use `InMemoryMailer`. See `docs/WEEK3-AUTH.md`. |
 
 Reference: Week 1 reviewed `/workspace/chiro-kpi-reference/AWS-Business-Associate-Addendum.pdf` (read-only). Re-verify the signed AWS BAA in Artifact before any production cutover.
+
+**BAA gate (2026-09):** User confirmed the AWS HIPAA BAA is **Active**. Infra-as-code and staging apply in that account may proceed. This still does **not** equal HIPAA certification or permission to load production PHI — see [DEPLOY-STAGING.md](./DEPLOY-STAGING.md) and [BACKUPS.md](./BACKUPS.md).
 
 ---
 
