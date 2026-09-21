@@ -88,7 +88,7 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# App Runner VPC connector ENIs — egress via NAT for Secrets Manager / ECR if needed;
+# App Runner VPC connector ENIs - egress via NAT for Secrets Manager / ECR if needed;
 # RDS traffic stays private.
 resource "aws_security_group" "apprunner_vpc" {
   name        = "${var.name_prefix}-apprunner-vpc"
@@ -108,7 +108,7 @@ resource "aws_security_group" "apprunner_vpc" {
 
 resource "aws_security_group" "rds" {
   name        = "${var.name_prefix}-rds"
-  description = "RDS Postgres — private only, from App Runner VPC connector"
+  description = "RDS Postgres - private only, from App Runner VPC connector"
   vpc_id      = aws_vpc.staging.id
 
   ingress {

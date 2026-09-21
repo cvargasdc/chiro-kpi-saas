@@ -1,5 +1,5 @@
 # Secrets Manager structure matching docs/SECRETS.md (staging prefix).
-# Placeholder strings only for app keys — Chris replaces via console/CLI before boot.
+# Placeholder strings only for app keys - Chris replaces via console/CLI before boot.
 # DATABASE_URL is populated from RDS (sensitive; never echo in CI).
 
 resource "random_password" "session_placeholder" {
@@ -61,7 +61,7 @@ resource "aws_secretsmanager_secret_version" "database_url" {
   secret_string = local.database_url
 }
 
-# Deferred / optional — placeholders so IAM + App Runner wiring exists.
+# Deferred / optional - placeholders so IAM + App Runner wiring exists.
 # Stripe deferred per product priority; Resend unused until mail is wired.
 resource "aws_secretsmanager_secret" "optional" {
   for_each = toset([
@@ -81,7 +81,7 @@ resource "aws_secretsmanager_secret_version" "optional" {
   for_each = aws_secretsmanager_secret.optional
 
   secret_id = each.value.id
-  # Explicit non-production placeholders — app fail-fast rejects these in NODE_ENV=production
+  # Explicit non-production placeholders - app fail-fast rejects these in NODE_ENV=production
   # until Chris replaces them. Stripe can stay unset until billing go-live.
   secret_string = "replace-with-staging-value-not-for-production"
 }
