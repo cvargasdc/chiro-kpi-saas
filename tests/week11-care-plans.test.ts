@@ -272,6 +272,8 @@ describe("Care plan generator APIs", () => {
     expect(pdf.headers["content-type"]).toMatch(/application\/pdf/);
     expect(Buffer.isBuffer(pdf.body)).toBe(true);
     expect((pdf.body as Buffer).subarray(0, 4).toString("utf8")).toBe("%PDF");
+    // Rich layout should be larger than the old plain text dump (~1–2KB).
+    expect((pdf.body as Buffer).length).toBeGreaterThan(2500);
 
     const logs = await a.agent.get("/api/audit-logs");
     const exported = logs.body.logs.find(

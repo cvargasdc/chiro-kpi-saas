@@ -608,6 +608,8 @@ export function registerCarePlanRoutes(app: Express, ctx: HttpContext): void {
         paymentQuotes: pub.paymentQuotes,
         terms: settings?.carePlanTerms?.trim() || DEFAULT_CARE_PLAN_TERMS,
         status: pub.status,
+        primaryColor: practice?.primaryColor ?? null,
+        logoUrl: practice?.logoUrl ?? null,
       });
 
       await logAudit(storage, {

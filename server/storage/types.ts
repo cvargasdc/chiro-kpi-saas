@@ -67,6 +67,8 @@ export type StoredPractice = {
   orgId: string;
   name: string;
   status: "active" | "suspended" | "disabled";
+  logoUrl?: string | null;
+  primaryColor?: string | null;
   createdAt: Date;
 };
 

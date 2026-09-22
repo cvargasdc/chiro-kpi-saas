@@ -807,6 +807,8 @@ export class DrizzleStorage implements AppStorage {
       orgId: row.orgId,
       name: row.name,
       status: row.status,
+      logoUrl: row.logoUrl ?? null,
+      primaryColor: row.primaryColor ?? null,
       createdAt: row.createdAt,
     }));
   }
@@ -825,6 +827,8 @@ export class DrizzleStorage implements AppStorage {
       orgId: row.orgId,
       name: row.name,
       status: row.status,
+      logoUrl: row.logoUrl ?? null,
+      primaryColor: row.primaryColor ?? null,
       createdAt: row.createdAt,
     };
   }
@@ -841,6 +845,8 @@ export class DrizzleStorage implements AppStorage {
       orgId: row.orgId,
       name: row.name,
       status: row.status,
+      logoUrl: row.logoUrl ?? null,
+      primaryColor: row.primaryColor ?? null,
       createdAt: row.createdAt,
     };
   }
