@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import AppShell from "../components/AppShell";
+import DailyStatsDialog from "../components/DailyStatsDialog";
 import { Link } from "wouter";
 import {
   api,
@@ -106,7 +107,19 @@ export default function DashboardPage({ me, onLogout }: Props) {
                   : "Visits, revenue, and office visit average from the daily log."}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <DailyStatsDialog
+                me={me}
+                onComplete={() => {
+                  setKpiError("");
+                  loadDashboard(period).catch((err) =>
+                    setKpiError(
+                      err instanceof Error ? err.message : "Could not load KPIs",
+                    ),
+                  );
+                  loadPatients().catch(() => setPatients([]));
+                }}
+              />
               {(["this_week", "this_month", "custom"] as const).map((key) => (
                 <button
                   key={key}

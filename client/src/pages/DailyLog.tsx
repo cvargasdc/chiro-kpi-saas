@@ -165,7 +165,10 @@ export default function DailyLogPage({ me, onLogout }: Props) {
         <div>
           <h2 className="text-2xl font-semibold">Daily Log</h2>
           <p className="text-sm text-ink-500">
-            One row per calendar day. Revenue is stored as integer cents.
+            Enter visits and revenue for each day.
+          </p>
+          <p className="text-xs text-ink-500 mt-1">
+            Tip: use Enter Daily Stats on the Dashboard for the guided flow.
           </p>
         </div>
         <form
